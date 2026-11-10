@@ -1,8 +1,7 @@
 # Operational implementation plan
 
 No milestone includes an operational FastAPI application. Keep existing optional
-dependencies/scaffolding. Milestones 1–3 are implemented; remediation/verification
-and the simulator remain planned. Integration tests accompany each increment.
+dependencies/scaffolding. Milestones 1–4 are implemented; the simulator remains planned. Integration tests accompany each increment.
 
 ## Milestone 1 — Database foundation (completed)
 
@@ -74,21 +73,54 @@ Acceptance tests cover PostgreSQL constraints, both null and installation-scoped
 concurrent first detections with an observed lock wait, rollback after finding/
 event flush and recurrence failure, plus migration upgrade/downgrade/re-upgrade
 and metadata parity. Existing inventory data survives downgrade to `0002`.
-Verification/resolution are not implemented: recurrence tests stage test-only
-resolved states. See `assessment-services.md` for the minimal fixture example.
+Those original assessment tests stage test-only resolved states; Milestone 4
+adds separate verification-backed lifecycle tests. See `assessment-services.md`
+for the minimal fixture example.
 
-Stop after Milestone 3 for review. No remediation, external matching/ingestion,
-HTTP endpoint, simulator, warehouse or ML implementation belongs to this increment.
+Milestone 3 added assessment only. Remediation and verification were added
+separately in Milestone 4; external matching/ingestion, HTTP, simulation, warehouse
+and ML functionality remain outside these increments.
 
-## Milestone 4 — Remediation and verification
+## Milestone 4 — Remediation and verification (implemented; review boundary)
 
-Implement tasks, task-finding links, task/action events and verification results.
+Revision `0004 -> 0003` completes the 15-table design with `remediation_tasks`,
+`task_findings`, `remediation_events` and `verification_results`. Previous revision
+files and the first 11 table definitions are unchanged.
+
+Implemented operations: create/assign/plan tasks, add/withdraw occurrence-bound
+targets, validated state transitions/reopening/cancellation, record action
+outcomes, atomically change software inventory with action history, verify
+scan/manual evidence, atomically resolve with a shared operation ID, and close
+multi-target eliminate/mitigate work only after all proof requirements pass.
+Task completion remains separate from verified closure. Pure action logging
+never runs an external scanner/process or claims a successful remediation.
+
+Scan absence is explicit, completed, correctly scoped and newer than positives
+and applicable actions; exact inventory and target-absence coverage are checked.
+Manual evidence is a documented independent attestation with verifier/rationale.
+Mitigation remains distinct from elimination and must be unexpired at closure.
+Task/asset/finding locks, replay digests and database uniqueness serialize competing
+writers. Existing inventory guards also protect manually verified history.
+Backdated reinstallation is rejected when it would contradict accepted absence.
+The architecture's finding-first prose was clarified to honor established parent
+lock order; no circular FK or extra domain table was introduced.
+
+Tests cover both race orderings for verification/detection, task updates/closure
+versus scope withdrawal, multiple targets, invalid and historical evidence,
+mitigation expiry, retry conflicts, SQL constraints and rollback. All previous
+behavior tests remain; historical `0003` metadata parity is checked against its
+11-table subset, while head/foundation parity now includes all 15. Migration
+`0004` downgrade preserves the previous 11 tables and their data. The runnable
+fixture workflow and its identical replay are also exercised by PostgreSQL tests.
 
 Acceptance: a task addresses multiple finding occurrences; completion alone does
 not resolve them; failed actions remain visible; verification decision, current
 state and resolution event commit atomically under a shared operation ID;
 injected failures roll back everything; old-cycle/stale evidence is rejected;
 retry does not duplicate resolution; eliminate/mitigate closure rules differ.
+
+Stop after Milestone 4 for review. The simulator and all external/analytical/ML
+components remain unimplemented. See `remediation-services.md`.
 
 ## Milestone 5 — Python enterprise simulator
 

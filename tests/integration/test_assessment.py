@@ -9,10 +9,13 @@ from uuid import uuid4
 
 import pytest
 from alembic import command
+from alembic.autogenerate import compare_metadata
 from alembic.config import Config
-from sqlalchemy import func, insert, inspect, select, text, update
+from alembic.migration import MigrationContext
+from sqlalchemy import MetaData, func, insert, inspect, select, text, update
 from sqlalchemy.exc import IntegrityError
 
+from patchledger.db.migrations import get_target_metadata, include_name
 from patchledger.db.session import make_session_factory
 from patchledger.operational.exceptions import (
     HistoricalConflictError,
@@ -718,7 +721,7 @@ def test_0003_roundtrip_preserves_inventory_data(postgres_engine):
             "history": period.id,
         }
     migrate(postgres_engine, command.upgrade, "0003")
-    migrate(postgres_engine, command.check)
+    check_0003_metadata(postgres_engine)
     with sessions.begin() as session:
         observation(session, target)
     with postgres_engine.connect() as connection:
@@ -748,9 +751,28 @@ def test_0003_roundtrip_preserves_inventory_data(postgres_engine):
             == "1"
         )
     migrate(postgres_engine, command.upgrade, "0003")
-    migrate(postgres_engine, command.check)
+    check_0003_metadata(postgres_engine)
     with postgres_engine.connect() as connection:
         assert len(inspect(connection).get_table_names(schema="operational")) == 11
+
+
+def check_0003_metadata(engine):
+    """Keep the original 11-table parity assertion at this historical revision."""
+    metadata = MetaData()
+    future = {
+        "remediation_tasks",
+        "task_findings",
+        "remediation_events",
+        "verification_results",
+    }
+    for table in get_target_metadata().sorted_tables:
+        if table.name not in future:
+            table.to_metadata(metadata)
+    with engine.connect() as connection:
+        context = MigrationContext.configure(
+            connection, opts={"include_schemas": True, "include_name": include_name}
+        )
+        assert compare_metadata(context, metadata) == []
 
 
 def test_retry_after_resolution_preserves_original_observation(sessions, target):

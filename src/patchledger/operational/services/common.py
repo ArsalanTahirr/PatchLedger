@@ -1,7 +1,10 @@
-"""Explicit business-time and provenance inputs shared by inventory operations."""
+"""Shared business-time, provenance and bounded idempotency payload helpers."""
 
+import hashlib
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from uuid import UUID
 
 from patchledger.operational.exceptions import InvalidOperationError
 
@@ -37,3 +40,34 @@ class EventContext:
             raise InvalidOperationError(
                 "is_synthetic must be explicit boolean provenance"
             )
+
+
+def bounded_json_object(value, field):
+    if not isinstance(value, dict):
+        raise InvalidOperationError(f"{field} must be a JSON object")
+    try:
+        encoded = json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False)
+        if len(encoded.encode()) > 16384:
+            raise InvalidOperationError(f"{field} exceeds 16384 bytes")
+        return json.loads(encoded)
+    except (TypeError, ValueError, RecursionError) as exc:
+        raise InvalidOperationError(f"{field} must contain valid JSON values") from exc
+
+
+def payload_digest(values):
+    def encode(value):
+        if isinstance(value, datetime):
+            return effective_time(value).isoformat()
+        if isinstance(value, UUID):
+            return str(value)
+        raise TypeError("Unsupported operational payload value")
+
+    return hashlib.sha256(
+        json.dumps(
+            values,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+            default=encode,
+        ).encode()
+    ).hexdigest()

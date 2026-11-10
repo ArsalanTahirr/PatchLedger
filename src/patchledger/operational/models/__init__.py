@@ -15,6 +15,12 @@ from patchledger.operational.models.inventory import (
     SoftwareInstallation,
     SoftwareProduct,
 )
+from patchledger.operational.models.remediation import (
+    RemediationEvent,
+    RemediationTask,
+    TaskFinding,
+    VerificationResult,
+)
 
 __all__ = [
     "Asset",
@@ -23,9 +29,13 @@ __all__ = [
     "FindingEvent",
     "InstallationHistory",
     "ProductIdentifier",
+    "RemediationEvent",
+    "RemediationTask",
     "ScanObservation",
     "ScanRun",
     "SoftwareInstallation",
     "SoftwareProduct",
+    "TaskFinding",
+    "VerificationResult",
     "VulnerabilityFinding",
 ]
