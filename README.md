@@ -47,6 +47,37 @@ Revision `0001_operational_schema` creates the namespace; `0002` creates the sev
 inventory tables. Alembic keeps its version table in `public`. Connections use UTC;
 business event timestamps must be explicitly supplied and timezone-aware.
 
+## Optional dependencies
+
+The default `uv sync --locked --dev` installs the operational database and
+configuration dependencies plus pytest and Ruff. CI uses this same command.
+Future components have optional extras:
+
+| Extra | Packages | Intended use |
+| --- | --- | --- |
+| `etl` | pandas, NumPy, PyArrow, HTTPX, Requests | Future transformation and external ingestion |
+| `ml` | scikit-learn, PyTorch | Future machine learning |
+| `api` | FastAPI, Uvicorn with standard extras | Possible future API components |
+
+Install an extra when working on that component:
+
+```sh
+uv sync --locked --dev --extra etl
+uv sync --locked --dev --extra ml
+uv sync --locked --dev --extra api
+```
+
+Repeat `--extra` to combine components, for example
+`uv sync --locked --dev --extra etl --extra ml`. Select the same extras when using
+`uv run`, for example `uv run --extra etl python your_ingestion_script.py` once
+such a script exists. These dependencies do not implement the planned components.
+PyTorch's platform-specific CUDA dependencies may be installed with `ml`.
+
+The shared `uv.lock` includes optional packages for reproducibility; their presence
+in the lockfile does not mean they are installed by default. Run
+`uv sync --locked --dev` to return to the core development environment. Structlog,
+mypy and pytest-cov are omitted because current code and checks do not use them.
+
 ## Migrations
 
 Alembic now lives in `db/migrations/`, moved from `warehouse/migrations/` before
@@ -129,5 +160,5 @@ exercise database constraints, typed asset history, version lifecycles, historic
 lookup, backdated-change rejection and concurrent upgrades. All fixture data and
 test-only probe tables exist exclusively in disposable test databases.
 
-The simulator CLI is planned for Milestone 5, not available yet. FastAPI remains
-installed for possible future analytical use; no OLTP API work is planned.
+The simulator CLI is planned for Milestone 5, not available yet. FastAPI is
+available through the optional `api` extra; no OLTP API work is planned.
