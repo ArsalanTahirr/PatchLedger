@@ -19,6 +19,8 @@ from patchledger.operational.models import (
     InstallationHistory,
     ScanObservation,
     SoftwareInstallation,
+    VerificationResult,
+    VulnerabilityFinding,
 )
 from patchledger.operational.models.inventory import (
     ASSET_TYPES,
@@ -285,6 +287,18 @@ def retire_asset(
         .join(SoftwareInstallation)
         .where(SoftwareInstallation.asset_id == asset_id)
     )
+    if session.scalar(
+        select(VerificationResult.id)
+        .join(VulnerabilityFinding)
+        .where(
+            VulnerabilityFinding.asset_id == asset.id,
+            VerificationResult.evidence_at >= context.occurred_at,
+        )
+        .limit(1)
+    ):
+        raise HistoricalConflictError(
+            "Asset retirement would invalidate recorded verification evidence"
+        )
     if session.scalar(history.where(InstallationHistory.ended_at.is_(None)).limit(1)):
         raise InvalidOperationError(
             "Remove installed software explicitly before retiring the asset"

@@ -1,7 +1,5 @@
 """Idempotent assessment ingestion and finding reconciliation; caller owns commit."""
 
-import hashlib
-import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -29,7 +27,6 @@ from patchledger.operational.models import (
 )
 from patchledger.operational.models.assessment import (
     CVE_PATTERN,
-    EVIDENCE_LIMIT,
     OUTCOMES,
     SCAN_STATUSES,
 )
@@ -37,6 +34,12 @@ from patchledger.operational.services.common import (
     EventContext,
     effective_time,
     nonempty,
+)
+from patchledger.operational.services.common import (
+    bounded_json_object as _json_object,
+)
+from patchledger.operational.services.common import (
+    payload_digest as _digest,
 )
 
 TERMINAL_STATUSES = {"completed", "partial", "failed", "cancelled"}
@@ -58,37 +61,6 @@ class SLAPolicy:
             raise InvalidOperationError(
                 "SLA target must be positive integer seconds within PostgreSQL integer range"
             )
-
-
-def _json_object(value, field):
-    if not isinstance(value, dict):
-        raise InvalidOperationError(f"{field} must be a JSON object")
-    try:
-        encoded = json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False)
-        if len(encoded.encode()) > EVIDENCE_LIMIT:
-            raise InvalidOperationError(f"{field} exceeds {EVIDENCE_LIMIT} bytes")
-        return json.loads(encoded)
-    except (TypeError, ValueError, RecursionError) as exc:
-        raise InvalidOperationError(f"{field} must contain valid JSON values") from exc
-
-
-def _digest(values):
-    def encode(value):
-        if isinstance(value, datetime):
-            return effective_time(value).isoformat()
-        if isinstance(value, UUID):
-            return str(value)
-        raise TypeError("Unsupported assessment payload value")
-
-    return hashlib.sha256(
-        json.dumps(
-            values,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-            default=encode,
-        ).encode()
-    ).hexdigest()
 
 
 def _scan_times(status, started_at, completed_at):

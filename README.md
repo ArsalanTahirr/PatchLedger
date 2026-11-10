@@ -1,16 +1,17 @@
 # PatchLedger
 
 Cybersecurity exposure intelligence through operational simulation, data
-warehousing, BI and AI. Currently implemented: **Milestones 1–3, database foundation,
-enterprise inventory, vulnerability assessment and finding lifecycle**. Eleven
-operational tables and transactional inventory/assessment services exist.
-Remediation, verification, the enterprise simulator,
+warehousing, BI and AI. Currently implemented: **Milestones 1–4, the complete
+15-table operational database**. Inventory, vulnerability assessment, finding
+lifecycle, remediation and verification have transactional Python services.
+The enterprise simulator,
 FastAPI application, intelligence ingestion and warehouse pipelines are future work.
 
 - [OLTP architecture and 15-table ERD](docs/architecture/operational-database.md)
 - [Implementation milestones and acceptance criteria](docs/architecture/implementation-plan.md)
 - [Runnable Python inventory service examples](docs/architecture/inventory-services.md)
 - [Python assessment and finding example](docs/architecture/assessment-services.md)
+- [Runnable remediation and verification fixture](docs/architecture/remediation-services.md)
 
 ## Developer setup
 
@@ -31,7 +32,7 @@ Requirements: Python 3.12, uv, Docker and Docker Compose.
    docker compose up -d --wait postgres
    ```
 
-4. Apply all three migrations from the repository root:
+4. Apply all four migrations from the repository root:
 
    ```sh
    uv run alembic upgrade head
@@ -46,8 +47,8 @@ validation error text. Do not log raw settings URLs or structured validation
 errors containing inputs.
 
 Revision `0001_operational_schema` creates the namespace; `0002` creates the seven
-inventory tables; `0003` creates the four assessment/finding tables. Alembic keeps
-its version table in `public`. Connections use UTC;
+inventory tables; `0003` creates assessment/finding tables; `0004` completes
+remediation/verification. Alembic keeps its version table in `public`. Connections use UTC;
 business event timestamps must be explicitly supplied and timezone-aware.
 
 ## Optional dependencies
@@ -106,10 +107,12 @@ uv run alembic downgrade base
 uv run alembic upgrade head
 ```
 
-Downgrading `0003` to `0002` removes assessment/finding history and preserves
+Downgrading `0004` to `0003` removes remediation/verification history while
+preserving the first 11 tables. Downgrading `0003` to `0002` removes
+assessment/finding history and preserves
 inventory. Downgrading `0002` removes its seven tables and their data. Downgrading `0001`
 drops `operational` without CASCADE and fails if unknown objects remain. Tests
-exercise both steps in disposable databases. Upgrade fails if an unmanaged
+exercise the full chain in disposable databases. Upgrade fails if an unmanaged
 `operational` schema already exists. Do not stamp/adopt an existing schema without
 checking ownership and DDL.
 
@@ -165,8 +168,11 @@ lookup, backdated-change rejection and concurrent upgrades. All fixture data and
 test-only probe tables exist exclusively in disposable test databases. Assessment
 tests cover idempotency/conflicts, scoped references, repeated detections,
 recurrence versus late evidence, concurrent first detections and atomic rollback.
-All vulnerability applicability in these tests is explicitly synthetic; no
-validated NVD matching or production verification is implemented.
+Remediation tests cover completed-versus-closed work, action/verification retries,
+explicit absence, mitigation expiry, occurrence-aware multi-target closure,
+manual attestations, transactional rollback and competing writers. All fixture
+vulnerability applicability is explicitly synthetic; no validated NVD matching
+is implemented.
 
 The simulator CLI is planned for Milestone 5, not available yet. FastAPI is
 available through the optional `api` extra; no OLTP API work is planned.

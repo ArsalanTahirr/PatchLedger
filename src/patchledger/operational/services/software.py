@@ -20,6 +20,8 @@ from patchledger.operational.models import (
     ScanObservation,
     SoftwareInstallation,
     SoftwareProduct,
+    VerificationResult,
+    VulnerabilityFinding,
 )
 from patchledger.operational.services.assets import lock_asset
 from patchledger.operational.services.common import (
@@ -255,6 +257,23 @@ def install_software(
             raise HistoricalConflictError(
                 "Backdated reinstallation would rewrite established history"
             )
+        if session.scalar(
+            select(VerificationResult.id)
+            .join(
+                VulnerabilityFinding,
+                VulnerabilityFinding.id == VerificationResult.finding_id,
+            )
+            .where(
+                VulnerabilityFinding.installation_id == installation.id,
+                VerificationResult.verdict == "absence_confirmed",
+                VerificationResult.accepted,
+                VerificationResult.evidence_at >= context.occurred_at,
+            )
+            .limit(1)
+        ):
+            raise HistoricalConflictError(
+                "Backdated reinstallation would contradict accepted absence evidence"
+            )
     return _new_period(
         session,
         installation.id,
@@ -303,6 +322,17 @@ def _expected_period(session, installation_id, expected_history_id, context):
             "Version closure would invalidate already-recorded assessment evidence"
         )
     # Reject a conflicting closed/future period even if it was inserted outside services.
+    if session.scalar(
+        select(VerificationResult.id)
+        .where(
+            VerificationResult.assessed_history_id == current.id,
+            VerificationResult.evidence_at >= context.occurred_at,
+        )
+        .limit(1)
+    ):
+        raise HistoricalConflictError(
+            "Version closure would invalidate recorded verification evidence"
+        )
     if session.scalar(
         select(InstallationHistory.id)
         .where(

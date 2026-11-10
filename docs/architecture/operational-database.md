@@ -1,9 +1,9 @@
 # Operational database architecture
 
-Status: Milestones 1–3 are implemented. Seven inventory tables exist through
-revision `0002`; revision `0003` adds the four assessment/finding tables.
-The four remediation/verification tables remain a design for Milestone 4.
-The approved 15-table baseline is unchanged.
+Status: Milestones 1–4 are implemented. Revisions `0001`–`0004` now create all
+15 approved operational tables: seven inventory, four assessment/finding and
+four remediation/verification tables. The first 11 table definitions and previous
+revisions are unchanged by Milestone 4.
 
 ## Scope and boundaries
 
@@ -185,8 +185,8 @@ The inventory implementation agrees with the approved baseline: installation IDs
 remain stable across version changes, and the candidate keys `(id, asset_id)` on
 installations and `(id, installation_id)` on history already exist. No inventory
 model or previous migration changes are needed. The old implementation-plan stop
-at Milestone 2 is superseded by this increment. There are exactly 11 implemented
-operational tables and still 15 in the approved complete design.
+at Milestone 2 is superseded by this increment. Milestone 3 reached 11 operational tables; Milestone 4 completes the same
+15-table design below.
 
 `ScanRun` represents one asset execution. Its source-scoped identity is
 `(source_key, external_run_key, asset_id)`; a batch key groups executions without
@@ -248,8 +248,9 @@ new numbered `reopened` event, changes `current_opened_at`, clears the current
 resolution time, and snapshots the supplied versioned `SLAPolicy`. The deadline
 is opening time plus target seconds. A null policy explicitly means no configured
 SLA for the new occurrence. Repeats never reset it. Old event snapshots remain
-intact. `resolved`/`sla_changed` event types are defined for future services; this
-milestone has no production resolution, verification, or SLA-edit command.
+intact. `resolved` events are now written by Milestone 4 verification. `sla_changed`
+remains reserved: there is no SLA-edit command. The assessment ingestion service
+itself never resolves a finding.
 
 Late positive evidence inside an already-known open interval is preserved and
 associated with that finding without creating a recurrence. If the finding is
@@ -287,9 +288,9 @@ deadline lookups, evidence by finding/time, historical targets and recorded-time
 extraction. UUIDs, recording times and business times remain distinct; insertion
 sequence alone is not a commit-order ETL checkpoint.
 
-See [assessment service examples](assessment-services.md). Resolution and verified
-absence remain Milestone 4 work. Its recurrence tests currently stage clearly
-labelled test-only resolved-state fixtures, not verification decisions.
+See [assessment service examples](assessment-services.md). The original
+Milestone 3 recurrence tests retain labelled resolved-state fixtures; Milestone 4
+adds end-to-end tests using the implemented verification service.
 
 ## Verification correction and transaction contract
 
@@ -309,7 +310,8 @@ entire workflow.
 
 One command owns one transaction:
 
-1. Lock the finding and identify its current opening event. Validate the
+1. Lock an associated task if present, then the evidence scan, asset and finding
+   in the established writer order. Identify the current opening event. Validate the
    operation key/digest; return the previous result on an identical retry and
    reject a conflicting retry.
 2. Validate evidence: target/CVE/occurrence agree, the asset scan completed, the
@@ -343,6 +345,167 @@ needed services. Nested calls share that session. Domain exceptions will include
 invalid transitions, invalid evidence, conflicting idempotency keys and invalid
 inventory periods. Inventory exceptions now exist; evidence and remediation
 exceptions belong to later milestones. No HTTP adapter is needed.
+
+## Implemented remediation and verification (Milestone 4)
+
+Revision `0004` depends on `0003` and adds exactly the four remaining tables.
+No first-11-table redesign or historical migration edit is needed. The previous
+finding-first wording of the verification transaction was inconsistent with the
+implemented assessment lock order; parent scan/asset locks are acquired first.
+The shared verification/resolution operation ID contract is retained unchanged.
+
+### Tables and integrity
+
+- `remediation_tasks`: UUID identity, nonrecycled unique `task_key`, title,
+  description, owner department, optional assignee, priority 1–5, immutable goal
+  (`eliminate`/`mitigate`), timezone-aware due/start/work-completed/closed times,
+  nonnegative integer estimated effort in minutes, current status and database
+  creation/update times. Checks enforce local timestamp/state consistency;
+  indexes cover owner/status, status/due and assignee.
+- `task_findings`: UUID link identity, task/finding FKs and scoped
+  `(opening_event_id, finding_id)` FK, added business/recording times and actor.
+  Unique `(task_id, finding_id, opening_event_id)` includes withdrawn links.
+  Withdrawal is a one-time closure with reason, actor, business and recording
+  time. A historical withdrawn link is not reactivated; use another task for the
+  same occurrence, or a new opening event for a recurrence. The service checks
+  that the referenced event is actually an opening/reopening, not only an event
+  belonging to the finding. Index finding/opening for reverse lookup.
+- `remediation_events`: UUID identity; unique task event number and
+  `(task_id, operation_id)`; SHA-256 request digest; typed full resulting task
+  snapshot, reason, actor/source/synthetic flag, business and recording times.
+  Action fields retain asset/installation, kind, outcome, nonnegative actual
+  effort in minutes, evidence reference and bounded JSONB, and scoped before/
+  after version FKs. Scope events reference their task link. Checks distinguish
+  action from state events. Timeline, action-target/time, version-reference and
+  recording-time indexes support operational queries and extraction.
+- `verification_results`: UUID decision identity, finding/scoped opening FK,
+  optional scoped task-link FK, observation/action/history FKs, method, verdict,
+  accepted flag, evidence and decision business times, recording time, verifier,
+  rationale, source/actor/synthetic provenance, evidence reference/bounded JSON,
+  optional mitigation expiry, operation ID and digest. Unique
+  `(finding_id, operation_id)` rejects duplicate logical requests; a partial
+  unique index permits at most one accepted absence per opening. Checks enforce
+  method/evidence shape, accepted/verdict agreement, decision-after-evidence and
+  mitigation validity. Index occurrence/decision time, history/evidence time,
+  optional evidence links and recording time.
+
+Every new FK uses RESTRICT; no history cascades away. JSONB evidence retains the
+16 KiB object limit. Important fields and state snapshots are relational, not
+JSON state blobs. Current state is not an event-sourced reconstruction.
+
+### Work and actions
+
+The task transition service permits:
+
+| Current state | Allowed next states |
+| --- | --- |
+| `open` | `in_progress`, `cancelled` |
+| `in_progress` | `blocked`, `completed`, `cancelled` |
+| `blocked` | `in_progress`, `cancelled` |
+| `completed` | `in_progress`, `closed`, `cancelled` |
+| `closed` / `cancelled` | `open` with an explicit reopening reason |
+
+Empty tasks can be planned but cannot start work, complete or close successfully.
+Starting work requires current open target occurrences. Work completion records
+`work_completed_at`; it neither resolves findings nor closes the task.
+`closed_at` exists only in the closed state. Reopening clears completion/closure
+and retains the first start time; events retain each cycle's business timestamps.
+Closed/cancelled scope, ownership and planning cannot change until reopening.
+Every mutation validates chronological order and writes a typed event atomically.
+Planning deadlines do not change finding SLA snapshots.
+
+`record_action` records a result after work has happened, with no external process
+inside its transaction. Kinds are patch, upgrade, downgrade, removal,
+configuration and mitigation; outcomes are succeeded, failed or inconclusive.
+Only in-progress/blocked tasks may record actions, and the target must match a
+current active task occurrence. One action may cover several CVEs on that same
+asset/installation; it never resolves any of them by itself.
+`apply_software_change` atomically uses the existing inventory services and records
+a successful patch/upgrade/downgrade/removal. Software success requires genuine
+adjacent before/after periods (or an explicitly closed removal). Failed attempts
+remain events; they do not imply a version change. A failure in a surrounding
+workflow rolls back both version history and event. These services model recorded
+operations; they do not deploy patches or run scanners.
+
+### Evidence and decisions
+
+`verify_finding` always addresses a current open occurrence. A replay returns the
+original immutable decision even after resolution. Changed content under the same
+operation key raises `IdempotencyConflictError`. Evidence, occurrence, action,
+asset, installation and CVE scope must agree. An action must precede its verifying
+evidence. Decision time cannot predate evidence or existing decision history.
+
+Scan verification requires a completed run and an explicit observation. Accepted
+absence requires `not_affected` or `target_absent`, strictly newer than every
+positive observation. Installation `not_affected` must identify the exact version
+present at evidence time. `target_absent` additionally requires actual historical
+inventory absence and this producer-declared scope structure:
+
+```json
+{"inventory_coverage": {"complete": true, "installation_ids": ["installation UUID"]}}
+```
+
+The scoped IDs must be a list. This is a trusted producer's coverage assertion,
+not independently validated scanner completeness. Scan verification rejects
+unfinished/partial/failed runs; their observations still remain available in the
+assessment subsystem. An absent observation is never verification evidence.
+Scan control verification requires an explicit evidence `control_verdict` of
+`effective` or `failed`; vulnerability presence alone says nothing about control
+effectiveness. Effective control evidence can coexist with an affected finding.
+
+Manual verification requires an explicitly identified verifier, rationale,
+reviewable reference or nonempty bounded evidence, evidence time, and independent
+assessment/inventory-review/control-validation category. A patch report by itself
+is not an accepted manual evidence category. Exact assessed history is required
+when the installation is present. These are documented human attestations,
+clearly distinguished from scanner observations; this system does not validate
+identity ownership, fetch referenced documents or independently prove the claims.
+
+Accepted decisions also reject intervening inventory changes/actions and newer
+contradictory verification results. Decision verdicts are `absence_confirmed`,
+`still_affected`, `mitigation_effective`, `mitigation_failed` and `inconclusive`.
+Only absence and effective mitigation are accepted; mitigation requires a future
+`valid_until`. Failure/inconclusive records preserve open findings.
+An accepted absence inserts its decision first, appends a `resolved` event with
+the same operation ID and evidence timestamp, and updates finding state in one
+transaction. `verified_at` retains the business decision time separately.
+Mitigation leaves the finding open. There is no reverse verification FK or
+current-state verification pointer. Tests exercise rollback after resolution
+flush so neither half of the shared operation can survive independently.
+
+### Closure and concurrency
+
+Only completed tasks may close. Every active occurrence is locked and validated
+before any task state change. Eliminate requires accepted absence and matching
+current resolution. Mitigate accepts absence or the latest accepted effective
+mitigation, valid strictly beyond closure time. New contradictory decisions,
+newer positives, inventory changes, later actions or expired validity require
+reassessment. Zero active targets and obsolete opening events prevent closure.
+An old closed task is a historical success for its old occurrence; recurrence
+does not silently retarget/reopen it. Create new work or explicitly reopen and
+replace its scope. Expiry is evaluated at closure; there is no background monitor
+that later changes closed task state.
+
+Writers acquire task locks before scope/state checks. Where needed, they then
+lock scan, asset, installation (for software mutation) and finding. Closure locks
+assets and findings in sorted identity order. Scan verification/closure use shared
+asset locks; inventory actions use the existing exclusive asset/installation
+locks. Positive ingestion and verification serialize on the finding. A competing
+newer positive blocks resolution, or becomes a genuine recurrence if resolution
+commits first. Late evidence inside a known former open period does not reopen.
+Transactions do not span external work. Multi-asset callers must preserve sorted
+lock order and retry the entire transaction after PostgreSQL deadlocks.
+
+Existing inventory services additionally reject backdated version closure or
+asset retirement that would invalidate manual verification evidence, extending
+the same guard already present for observations. No inventory table changes are
+needed. Reinstallation cannot backdate a new period into accepted target-absence
+evidence. ORM append-only guards cover events/decisions and one-time target
+withdrawal; bulk/Core SQL can bypass them. FKs enforce membership, while opening
+event type, nullable target scope, cross-row chronology, evidence sufficiency and
+verification/resolution pairing remain explicit service guarantees.
+
+See [remediation workflow and runnable fixture](remediation-services.md).
 
 ## Installation-period enforcement
 

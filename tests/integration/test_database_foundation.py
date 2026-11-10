@@ -17,7 +17,7 @@ from patchledger.db.session import make_session_factory
 
 pytestmark = pytest.mark.integration
 ROOT = Path(__file__).resolve().parents[2]
-REVISION = "0003"
+REVISION = "0004"
 OPERATIONAL_TABLES = {
     "departments",
     "assets",
@@ -30,6 +30,10 @@ OPERATIONAL_TABLES = {
     "scan_observations",
     "vulnerability_findings",
     "finding_events",
+    "remediation_tasks",
+    "task_findings",
+    "remediation_events",
+    "verification_results",
 }
 
 

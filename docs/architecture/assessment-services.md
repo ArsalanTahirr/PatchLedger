@@ -2,8 +2,9 @@
 
 These services are ordinary Python functions independent of HTTP and callable by
 the future simulator. This example uses **synthetic test-fixture applicability**;
-`CVE-2099-90001` is a format-valid placeholder, not a validated NVD match. No
-matching, external ingestion or verification service is implemented.
+`CVE-2099-90001` is a format-valid placeholder, not a validated NVD match.
+No matching or external ingestion is implemented. Verification is provided
+separately by the Milestone 4 services.
 
 The caller supplies an existing asset, its installation, the exact historical
 version assessed, and an explicit timezone-aware business time. Both observations
@@ -108,7 +109,7 @@ positive evidence always needs the historical version ID; a genuinely
 asset-scoped detection sets both installation/version IDs to `None`.
 
 The first positive creates one finding and an `opened` event. Repeats update only
-its maximum last-positive business time and preserve its opening/SLA. A future
+its maximum last-positive business time and preserve its opening/SLA. A
 verified resolution followed by strictly later positive evidence creates a
 `reopened` event on the same finding with a new SLA snapshot. A supplied policy
 applies to the new occurrence; `None` explicitly means no configured policy.
@@ -118,6 +119,7 @@ before an established reopening requires manual reconciliation and is rejected.
 On any service error, roll back the caller's transaction; never continue and
 commit partial work after catching the error.
 
-Resolution, accepted-absence evidence, SLA editing and remediation workflows are
-Milestone 4 work. Tests of recurrence stage a labelled resolved-state fixture;
-there is no callable production resolution shortcut in this milestone.
+Resolution, accepted-absence evidence and remediation workflows are now provided
+by [Milestone 4 services](remediation-services.md). The original assessment
+recurrence tests retain labelled resolved-state fixtures; new end-to-end tests use
+the verification service. SLA editing remains outside the implemented services.
