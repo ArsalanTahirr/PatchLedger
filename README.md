@@ -4,14 +4,17 @@ Cybersecurity exposure intelligence through operational simulation, data
 warehousing, BI and AI. Currently implemented: **Milestones 1–4, the complete
 15-table operational database**. Inventory, vulnerability assessment, finding
 lifecycle, remediation and verification have transactional Python services.
-The enterprise simulator,
-FastAPI application, intelligence ingestion and warehouse pipelines are future work.
+Milestone 5 adds a configurable Python enterprise simulator with synthetic
+applicability fixtures. Its PostgreSQL validation is pending in the restricted
+workspace; see the simulator guide. Intelligence ingestion, warehouse pipelines,
+AI and HTTP applications remain future work.
 
 - [OLTP architecture and 15-table ERD](docs/architecture/operational-database.md)
 - [Implementation milestones and acceptance criteria](docs/architecture/implementation-plan.md)
 - [Runnable Python inventory service examples](docs/architecture/inventory-services.md)
 - [Python assessment and finding example](docs/architecture/assessment-services.md)
 - [Runnable remediation and verification fixture](docs/architecture/remediation-services.md)
+- [Enterprise simulator, configuration, replay and validation](docs/architecture/enterprise-simulator.md)
 
 ## Developer setup
 
@@ -174,5 +177,12 @@ manual attestations, transactional rollback and competing writers. All fixture
 vulnerability applicability is explicitly synthetic; no validated NVD matching
 is implemented.
 
-The simulator CLI is planned for Milestone 5, not available yet. FastAPI is
-available through the optional `api` extra; no OLTP API work is planned.
+Preview simulation without database access:
+
+```sh
+uv run python -m patchledger.simulation.runner --config examples/simulation-small.json --plan
+```
+
+The simulator uses the operational services and all 15 existing tables. See its
+guide for deliberate database execution and disposable integration tests.
+FastAPI remains available through the optional `api` extra; no OLTP API is needed.

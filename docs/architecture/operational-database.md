@@ -578,14 +578,14 @@ Future extraction uses stable IDs, consistent snapshots, both kinds of timestamp
 and reconciliation. A maximum insertion timestamp/allocated sequence alone is not
 a reliable commit-order checkpoint. No ETL or warehouse objects exist yet.
 
-## Future simulator contract
+## Implemented simulator contract (Milestone 5)
 
-The simulator will generate departments, hundreds of assets, inventories, repeated
+The simulator generates departments, configurable assets, inventories, repeated
 assessments, remediation tasks, failed/successful patch attempts and verification
 over a configurable timeline, such as 30–90 simulated days. All writes use the
 same services as integration tests. No arbitrary simulator table writes.
 
-Configuration will include scenario ID/version, seed, enterprise size and an
+Configuration includes scenario ID/version, seed, enterprise size and an
 explicit timezone-aware date range. A stable ordered event schedule, deterministic
 random generator, operation IDs derived from scenario/event identity, and stable
 fixture inputs make logical results reproducible. Replaying the same scenario
@@ -600,10 +600,20 @@ software applicability by randomly assigning real CVEs. Fixture provenance and
 synthetic event flags distinguish operational simulation from real NVD/EPSS/KEV
 source data. No matching engine or external ingestion is implemented here.
 
-The eventual documented interface is planned as
-`uv run python -m patchledger.simulation.runner --scenario ... --seed ... --start ... --end ... --assets ...`.
-It does not exist in Milestone 1. Only introduce simulator modules when their
-functionality is implemented.
+The implemented CLI is
+`uv run python -m patchledger.simulation.runner --scenario ... --seed ... --start ... --days ... --assets ...`.
+`--plan` works without a database; an optional JSON file configures distributions.
+Normal registration provenance holds a configuration/fixture fingerprint and a
+session advisory lock coordinates one scenario. Replay uses historical periods
+and service operation receipts, with bounded setup/workflow transactions and no
+extra bookkeeping table. All 15 table definitions and operational services remain
+unchanged. Reporting audits a read-only persisted snapshot; no attempted/planned
+counts are presented as database measurements.
+
+The current workspace permits unit/planning validation but blocks PostgreSQL TCP
+access. Disposable PostgreSQL 17 end-to-end, recovery and replay tests are present
+but their execution remains pending. See the [simulator guide](enterprise-simulator.md)
+for commands, fixture scope, configuration and known limitations.
 
 ## References
 
