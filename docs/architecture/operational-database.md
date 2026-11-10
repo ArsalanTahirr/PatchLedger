@@ -1,7 +1,8 @@
 # Operational database architecture
 
-Status: Milestones 1 and 2 are implemented. The first seven inventory tables below
-exist through revision `0002`; the remaining eight tables are still a design.
+Status: Milestones 1–3 are implemented. Seven inventory tables exist through
+revision `0002`; revision `0003` adds the four assessment/finding tables.
+The four remediation/verification tables remain a design for Milestone 4.
 The approved 15-table baseline is unchanged.
 
 ## Scope and boundaries
@@ -18,9 +19,8 @@ flowchart LR
 There is no operational FastAPI application. Services accept a SQLAlchemy session
 and domain inputs and raise Python exceptions. No HTTP schemas, routers,
 authentication, pagination, dependency injection, or operational web interface are
-needed. Existing FastAPI dependencies and empty API scaffolding are retained for
-possible future analytical functionality. Removing HTTP creates **no schema
-dependency or domain-table change**.
+needed. FastAPI dependencies are available through the optional `api` extra for
+possible future analytical functionality. There is no schema dependency on HTTP.
 
 NVD, EPSS, KEV, ingestion, warehouse transformations, simulation, and AI are future
 work. Alembic owns operational DDL, not analytical transformations. AI can run as
@@ -178,6 +178,118 @@ erDiagram
     task_findings o|--o{ verification_results : requested_for
     remediation_events o|--o{ verification_results : evaluates
 ```
+
+## Implemented assessment and finding contract (Milestone 3)
+
+The inventory implementation agrees with the approved baseline: installation IDs
+remain stable across version changes, and the candidate keys `(id, asset_id)` on
+installations and `(id, installation_id)` on history already exist. No inventory
+model or previous migration changes are needed. The old implementation-plan stop
+at Milestone 2 is superseded by this increment. There are exactly 11 implemented
+operational tables and still 15 in the approved complete design.
+
+`ScanRun` represents one asset execution. Its source-scoped identity is
+`(source_key, external_run_key, asset_id)`; a batch key groups executions without
+adding a batch table. `producer_version`, explicit `is_synthetic`, and a bounded
+JSONB scope object retain producer and declared coverage. Scope describes the
+producer's assessment, not independently validated completeness. All scopes and
+evidence objects are capped at 16 KiB of JSON text in PostgreSQL. No scan status
+or scope claim authorizes automatic resolution in Milestone 3.
+
+Runs can be created queued, running, or already terminal for batch ingestion.
+`set_scan_status` permits queued -> running/cancelled and running ->
+completed/partial/failed/cancelled. Terminal states are final; a new attempt uses
+a new run key. A queued cancellation may have no start. Other finished execution
+states require both times, and completion cannot precede existing observations.
+Creation retry compares a SHA-256 digest of normalized creation inputs, even if
+execution status has subsequently advanced. Changed content raises
+`IdempotencyConflictError`; a digest is an integrity/idempotency aid, not a signed
+security assertion.
+
+`ScanObservation` is immutable evidence. Its source key is scoped through its
+run: `(scan_run_id, external_observation_key)`. The same external observation key
+in another execution represents another observation. SHA-256 covers normalized
+content, UTC business time, actor and requested opening SLA; identical retry
+returns the original row, and changed content conflicts. Recording time and
+server-generated IDs are excluded. Scope/evidence dictionary key order does not
+affect retries. Source/producer/synthetic provenance comes from the run; rule/test
+identity is retained on each observation.
+
+A controlled redundant `scan_observations.asset_id` allows composite foreign keys
+to enforce scan/installation/asset agreement without triggers or extra tables.
+Composite keys also enforce history-to-installation and finding-to-asset/CVE
+agreement. Nullable scope equality between an observation and its optional
+finding is additionally enforced by reconciliation: PostgreSQL's ordinary
+composite FK semantics skip checks containing nulls. Arbitrary SQL must follow
+this writer contract. CVEs are syntax-checked strings without intelligence FKs.
+No product name, CPE, version, or valid-looking CVE is treated as applicability
+proof.
+
+An affected installation observation requires the precise historical version
+present at evidence time. Half-open inventory periods apply: evidence at the end
+belongs to the next period, if any. Explicit target absence can optionally
+reference an already-ended version; other evidence with a version reference must
+fall inside its period. Evidence must lie within scan execution and the asset's
+registered lifetime. Positive evidence from partial/failed runs is accepted;
+negative, inconclusive and omitted observations never resolve findings.
+
+`record_observation` inserts evidence and reconciles affected outcomes in the
+caller's transaction. `(asset_id, installation_id, cve_id) NULLS NOT DISTINCT`
+identifies one persistent finding across its entire lifecycle, including genuinely
+asset-scoped findings. First detection inserts an `opened` event. Repeats advance
+`last_observed_at` using the maximum positive evidence time and preserve the
+original opening and SLA. Negative evidence links to an existing matching finding
+when present, without creating one. Opening event operation IDs equal their
+causing observation IDs; they are correlation IDs without a reverse FK cycle.
+
+A resolved finding reopens only for positive evidence strictly after resolution
+and its latest lifecycle event. Reopening retains `first_detected_at`, creates a
+new numbered `reopened` event, changes `current_opened_at`, clears the current
+resolution time, and snapshots the supplied versioned `SLAPolicy`. The deadline
+is opening time plus target seconds. A null policy explicitly means no configured
+SLA for the new occurrence. Repeats never reset it. Old event snapshots remain
+intact. `resolved`/`sla_changed` event types are defined for future services; this
+milestone has no production resolution, verification, or SLA-edit command.
+
+Late positive evidence inside an already-known open interval is preserved and
+associated with that finding without creating a recurrence. If the finding is
+still resolved, its last-positive time may advance within that interval, strictly
+before resolution. Evidence before the first opening, exactly at resolution, or
+inside a previously closed gap before an established reopening is rejected with
+`HistoricalConflictError`. Such evidence may invalidate a historical decision or
+require an earlier opening: manual reconciliation is needed. Milestone 3 does not
+silently rewrite history or keep a separate episode table.
+
+Concurrency uses a run-row lock for observation-key retries/status changes, an
+asset share lock when validating the asset lifetime and historical software, then
+PostgreSQL's unique insertion and a finding row lock for lifecycle changes.
+Inventory writers already lock the asset exclusively before the installation.
+Version closure and retirement reject backdating at or before evidence that
+would thereby fall outside its assessed period or registered asset lifetime.
+The shared asset lock keeps these checks safe against in-flight observations;
+assessment readers of the same asset remain concurrent. First
+detections on different runs serialize through the finding unique key, including
+the null-installation case. Unrelated assets/findings are not globally locked.
+Future verification must use a compatible lock order (scan when needed,
+asset, installation when changing it, finding); it must not hold a finding while waiting for inventory
+locks. Multi-finding batches should process stable sorted identities to avoid
+opposite-order deadlocks and retry whole transactions on PostgreSQL deadlocks.
+
+Services flush but never commit. A rejected operation must roll back its
+caller-owned transaction, including its scan if created in that transaction.
+Observations and finding events have ORM append-only guards, consistent with
+inventory; Core/bulk SQL bypasses them. Database constraints enforce required
+references, scoped uniqueness, supported status/outcome/CVE values, bounded JSON,
+SLA completeness and local timestamp order. Chronology across rows, valid
+transitions and matching current-state/event histories require service use.
+Indexes support run/asset timelines, run status and batches, finding CVE/status/
+deadline lookups, evidence by finding/time, historical targets and recorded-time
+extraction. UUIDs, recording times and business times remain distinct; insertion
+sequence alone is not a commit-order ETL checkpoint.
+
+See [assessment service examples](assessment-services.md). Resolution and verified
+absence remain Milestone 4 work. Its recurrence tests currently stage clearly
+labelled test-only resolved-state fixtures, not verification decisions.
 
 ## Verification correction and transaction contract
 
