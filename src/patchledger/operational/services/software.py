@@ -17,6 +17,7 @@ from patchledger.operational.exceptions import (
 from patchledger.operational.models import (
     InstallationHistory,
     ProductIdentifier,
+    ScanObservation,
     SoftwareInstallation,
     SoftwareProduct,
 )
@@ -288,6 +289,18 @@ def _expected_period(session, installation_id, expected_history_id, context):
     if context.occurred_at <= current.started_at:
         raise HistoricalConflictError(
             "Change must follow the current version's start time"
+        )
+    if session.scalar(
+        select(ScanObservation.id)
+        .where(
+            ScanObservation.installation_history_id == current.id,
+            ScanObservation.outcome != "target_absent",
+            ScanObservation.occurred_at >= context.occurred_at,
+        )
+        .limit(1)
+    ):
+        raise HistoricalConflictError(
+            "Version closure would invalidate already-recorded assessment evidence"
         )
     # Reject a conflicting closed/future period even if it was inserted outside services.
     if session.scalar(

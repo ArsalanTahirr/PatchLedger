@@ -17,8 +17,8 @@ from patchledger.db.session import make_session_factory
 
 pytestmark = pytest.mark.integration
 ROOT = Path(__file__).resolve().parents[2]
-REVISION = "0002"
-INVENTORY_TABLES = {
+REVISION = "0003"
+OPERATIONAL_TABLES = {
     "departments",
     "assets",
     "asset_events",
@@ -26,6 +26,10 @@ INVENTORY_TABLES = {
     "product_identifiers",
     "software_installations",
     "installation_history",
+    "scan_runs",
+    "scan_observations",
+    "vulnerability_findings",
+    "finding_events",
 }
 
 
@@ -54,7 +58,7 @@ def test_upgrade_downgrade_reupgrade_preserves_unrelated_data(postgres_engine):
         assert inspect(connection).has_schema("operational")
         assert (
             set(inspect(connection).get_table_names(schema="operational"))
-            == INVENTORY_TABLES
+            == OPERATIONAL_TABLES
         )
         assert (
             connection.scalar(text("SELECT version_num FROM public.alembic_version"))
@@ -92,7 +96,7 @@ def test_upgrade_downgrade_reupgrade_preserves_unrelated_data(postgres_engine):
         assert inspect(connection).has_schema("operational")
         assert (
             set(inspect(connection).get_table_names(schema="operational"))
-            == INVENTORY_TABLES
+            == OPERATIONAL_TABLES
         )
 
 

@@ -1,4 +1,4 @@
-"""Inventory domain errors, independent of any transport or user interface."""
+"""Operational domain errors, independent of any transport or user interface."""
 
 
 class InventoryError(Exception):
@@ -27,3 +27,11 @@ class StaleVersionError(ConflictError):
 
 class ImmutableRecordError(InventoryError):
     """An ORM write attempts to change immutable identity or history."""
+
+
+class InvalidEvidenceError(InvalidOperationError):
+    """Assessment evidence disagrees with its scan, target or business timeline."""
+
+
+class IdempotencyConflictError(ConflictError):
+    """A source key was retried with different normalized content."""

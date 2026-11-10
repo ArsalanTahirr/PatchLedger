@@ -1,8 +1,8 @@
 # Operational implementation plan
 
 No milestone includes an operational FastAPI application. Keep existing optional
-dependencies/scaffolding. All tables below are planned until their milestone is
-implemented. Integration tests accompany each increment.
+dependencies/scaffolding. Milestones 1–3 are implemented; remediation/verification
+and the simulator remain planned. Integration tests accompany each increment.
 
 ## Milestone 1 — Database foundation (completed)
 
@@ -40,18 +40,45 @@ installation start/end provenance preserve business versus recording times.
 ORM identity/history guards supplement ordinary database constraints, without
 triggers. All service transactions remain caller-owned.
 
-Stop after this milestone. No scanning, finding, remediation or simulator
-implementation is included. Runnable examples are in `inventory-services.md`.
+This increment added inventory only. Runnable examples are in
+`inventory-services.md`; assessment was added separately in Milestone 3.
 
-## Milestone 3 — Vulnerability assessment
+## Milestone 3 — Vulnerability assessment (implemented; review boundary)
 
-Implement scans, immutable observations, findings and finding events.
+Revision `0003`, depending on unchanged `0002`, adds `scan_runs`,
+`scan_observations`, `vulnerability_findings` and `finding_events`. Focused
+services create and advance scan runs, ingest immutable observations, and
+reconcile persistent findings. No extra domain tables are introduced.
 
 Acceptance: identical replay is idempotent; conflicting keys fail; repeated
 observations create one finding; absence is never inferred from omission;
 source-time ordering avoids false reopenings; each genuine recurrence has a new
 opening event; positive/negative/inconclusive evidence remains distinct. Use
 labelled applicability fixtures, not invented real-world matches.
+
+Implemented choices: source/run/asset scan identity; observation keys within a run;
+canonical payload digests reject conflicting retries; PostgreSQL `NULLS NOT
+DISTINCT` finding uniqueness; run/asset/finding locks; exact historical
+version validation; caller-owned atomic transactions. Late evidence within known
+open periods is accepted without reopening; evidence contradicting established
+opening/resolution boundaries or closed gaps requires manual reconciliation.
+New openings snapshot an explicit policy/target/deadline without resetting SLAs
+on repeats. Composite FKs use one controlled redundant observation asset column
+for scope integrity. ORM history guards supplement the service contract.
+Inventory closure and retirement additionally reject backdating that would
+invalidate existing observations. Assessment readers share-lock the asset;
+inventory writers already lock it exclusively. No inventory table or old revision
+is changed by these narrowly scoped service guards.
+
+Acceptance tests cover PostgreSQL constraints, both null and installation-scoped
+concurrent first detections with an observed lock wait, rollback after finding/
+event flush and recurrence failure, plus migration upgrade/downgrade/re-upgrade
+and metadata parity. Existing inventory data survives downgrade to `0002`.
+Verification/resolution are not implemented: recurrence tests stage test-only
+resolved states. See `assessment-services.md` for the minimal fixture example.
+
+Stop after Milestone 3 for review. No remediation, external matching/ingestion,
+HTTP endpoint, simulator, warehouse or ML implementation belongs to this increment.
 
 ## Milestone 4 — Remediation and verification
 

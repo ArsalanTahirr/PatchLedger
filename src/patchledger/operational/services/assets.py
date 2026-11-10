@@ -17,6 +17,7 @@ from patchledger.operational.models import (
     AssetEvent,
     Department,
     InstallationHistory,
+    ScanObservation,
     SoftwareInstallation,
 )
 from patchledger.operational.models.inventory import (
@@ -268,6 +269,17 @@ def retire_asset(
     if asset.lifecycle_status == "retired":
         raise InvalidOperationError("Asset is already retired")
     latest = _latest_event(session, asset, context)
+    if session.scalar(
+        select(ScanObservation.id)
+        .where(
+            ScanObservation.asset_id == asset.id,
+            ScanObservation.occurred_at >= context.occurred_at,
+        )
+        .limit(1)
+    ):
+        raise HistoricalConflictError(
+            "Asset retirement would invalidate already-recorded assessment evidence"
+        )
     history = (
         select(InstallationHistory)
         .join(SoftwareInstallation)
