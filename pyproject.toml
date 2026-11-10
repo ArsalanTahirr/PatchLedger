@@ -6,27 +6,33 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.20.1",
-    "fastapi>=0.162.2",
+    "psycopg[binary]>=3.3.8",
+    "pydantic>=2.14.3,<3",
+    "pydantic-settings>=2.16.2",
+    "python-dotenv>=1.2.4",
+    "sqlalchemy>=2.1.8",
+]
+
+[project.optional-dependencies]
+etl = [
     "httpx>=0.28.1",
     "numpy>=2.5.4",
     "pandas>=3.1.1",
-    "psycopg[binary]>=3.3.8",
     "pyarrow>=26.0.1",
-    "pydantic-settings>=2.16.2",
-    "python-dotenv>=1.2.4",
     "requests>=2.34.2",
+]
+ml = [
     "scikit-learn>=1.9.1",
-    "sqlalchemy>=2.1.8",
-    "structlog>=26.1.0",
     "torch>=2.15.0",
+]
+api = [
+    "fastapi>=0.162.2",
     "uvicorn[standard]>=0.54.0",
 ]
 
 [dependency-groups]
 dev = [
-    "mypy>=2.4.1",
     "pytest>=9.2.0",
-    "pytest-cov>=7.1.0",
     "ruff>=0.17.4",
 ]
 

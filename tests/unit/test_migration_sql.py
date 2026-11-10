@@ -12,7 +12,7 @@ def test_offline_migration_has_no_domain_ddl_or_password(monkeypatch):
     output = StringIO()
     root = Path(__file__).resolve().parents[2]
     config = Config(str(root / "alembic.ini"), output_buffer=output)
-    command.upgrade(config, "head", sql=True)
+    command.upgrade(config, "0001_operational_schema", sql=True)
     sql = output.getvalue()
     assert "CREATE SCHEMA operational" in sql
     assert "public.alembic_version" in sql

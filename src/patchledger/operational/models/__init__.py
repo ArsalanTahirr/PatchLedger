@@ -1,5 +1,21 @@
-"""Model registration point.
+"""Explicit model registration for Alembic and inventory services."""
 
-Import each future model module here so Alembic sees its tables. Milestone 1 has
-no operational models or tables.
-"""
+from patchledger.operational.models.inventory import (
+    Asset,
+    AssetEvent,
+    Department,
+    InstallationHistory,
+    ProductIdentifier,
+    SoftwareInstallation,
+    SoftwareProduct,
+)
+
+__all__ = [
+    "Asset",
+    "AssetEvent",
+    "Department",
+    "InstallationHistory",
+    "ProductIdentifier",
+    "SoftwareInstallation",
+    "SoftwareProduct",
+]

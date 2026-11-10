@@ -17,7 +17,16 @@ from patchledger.db.session import make_session_factory
 
 pytestmark = pytest.mark.integration
 ROOT = Path(__file__).resolve().parents[2]
-REVISION = "0001_operational_schema"
+REVISION = "0002"
+INVENTORY_TABLES = {
+    "departments",
+    "assets",
+    "asset_events",
+    "software_products",
+    "product_identifiers",
+    "software_installations",
+    "installation_history",
+}
 
 
 def run_alembic(engine, operation, *args):
@@ -43,11 +52,24 @@ def test_upgrade_downgrade_reupgrade_preserves_unrelated_data(postgres_engine):
     run_alembic(postgres_engine, command.upgrade, "head")
     with postgres_engine.connect() as connection:
         assert inspect(connection).has_schema("operational")
-        assert inspect(connection).get_table_names(schema="operational") == []
+        assert (
+            set(inspect(connection).get_table_names(schema="operational"))
+            == INVENTORY_TABLES
+        )
         assert (
             connection.scalar(text("SELECT version_num FROM public.alembic_version"))
             == REVISION
         )
+    run_alembic(postgres_engine, command.check)
+
+    run_alembic(postgres_engine, command.downgrade, "0001_operational_schema")
+    with postgres_engine.connect() as connection:
+        assert inspect(connection).get_table_names(schema="operational") == []
+        assert (
+            connection.scalar(text("SELECT version_num FROM public.alembic_version"))
+            == "0001_operational_schema"
+        )
+    run_alembic(postgres_engine, command.upgrade, "head")
     run_alembic(postgres_engine, command.check)
 
     run_alembic(postgres_engine, command.downgrade, "base")
@@ -68,7 +90,10 @@ def test_upgrade_downgrade_reupgrade_preserves_unrelated_data(postgres_engine):
     run_alembic(postgres_engine, command.check)
     with postgres_engine.connect() as connection:
         assert inspect(connection).has_schema("operational")
-        assert inspect(connection).get_table_names(schema="operational") == []
+        assert (
+            set(inspect(connection).get_table_names(schema="operational"))
+            == INVENTORY_TABLES
+        )
 
 
 def test_alembic_online_environment_uses_database_url(postgres_engine, monkeypatch):

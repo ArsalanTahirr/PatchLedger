@@ -1,7 +1,8 @@
 # Operational database architecture
 
-Status: the 15-table baseline is approved in principle. Only Milestone 1 is
-implemented. The entities below are a design, not existing database tables.
+Status: Milestones 1 and 2 are implemented. The first seven inventory tables below
+exist through revision `0002`; the remaining eight tables are still a design.
+The approved 15-table baseline is unchanged.
 
 ## Scope and boundaries
 
@@ -228,7 +229,8 @@ provenance and domain inputs; they may flush but must not independently commit.
 The runner/application command opens `session_factory.begin()` and calls the
 needed services. Nested calls share that session. Domain exceptions will include
 invalid transitions, invalid evidence, conflicting idempotency keys and invalid
-inventory periods; these belong to later milestones. No HTTP adapter is needed.
+inventory periods. Inventory exceptions now exist; evidence and remediation
+exceptions belong to later milestones. No HTTP adapter is needed.
 
 ## Installation-period enforcement
 
@@ -239,10 +241,11 @@ upgrade/downgrade/removal service locks the stable installation row with
 timeline, and atomically closes/inserts periods. All writers lock the same parent.
 
 Use the caller's expected current history ID to reject stale competing upgrades.
-For a backdated change, inspect all affected periods, not just the current row.
-Reject overlaps and ordinary requests that would require rewriting a later
-recorded transition. A nonoverlapping historical insertion into a genuine gap may
-be accepted explicitly. Adjacency is allowed; zero-length periods are not.
+Milestone 2 rejects unsupported backdated changes, including insertions into
+earlier gaps. Reinstallation can append after the latest removal; it cannot
+rewrite an earlier interval. Version changes inspect other periods for conflicting
+history, including closed periods. Adjacency is allowed; zero-length periods are
+not. Version strings are opaque: the caller explicitly declares upgrade/downgrade.
 
 No exclusion constraint or extension is used initially. This only guarantees
 nonoverlap when all writers follow the locking/validation contract. Raw SQL,
@@ -251,10 +254,29 @@ overlapping **closed** periods despite the ordinary constraints. Administrative
 corrections need explicit review and the same timeline validation. Reconsider an
 exclusion constraint if independent writers are introduced.
 
-Milestone 2 tests must cover concurrent upgrades on separate connections, stale
-expected-version rejection, adjacent periods, removal/reinstallation, valid gap
-insertion, backdated overlap with closed periods, overlapping current periods,
-and complete rollback after an injected failure.
+Milestone 2 tests cover concurrent upgrades on separate connections (including an
+observed PostgreSQL lock wait), stale expected-version rejection, adjacent periods,
+removal/reinstallation, rejection of earlier-gap insertion and backdated overlaps,
+duplicate current periods, and complete rollback after an injected failure.
+
+Inventory services lock the asset before its installation; this also serializes
+software writes against asset retirement. Asset retirement requires explicit
+software removal first, never fabricated removal timestamps. Departments cannot
+retire while owning nonretired assets, or before the recorded timelines of assets
+previously assigned to them. This is a conservative backdating policy.
+
+Asset changes write complete snapshots and reject timestamps before the latest
+event. Equal event times use event numbers for order. No-op updates write no event.
+Department assignments and criticality are retained; department names are not.
+ORM flush guards reject identity changes, asset-event edits/deletes and version
+history rewrites; a version period may be closed once. These are convenience
+guardrails, not database triggers or a replacement for service use. Core/bulk SQL
+can bypass them. No role/permission enforcement framework is introduced here.
+
+`EventContext` explicitly supplies UTC-normalized business time, actor, source and
+synthetic provenance. Creation/update/recording timestamps use the actual database
+clock. Installation closures retain separate recording time and end provenance.
+See [inventory service examples](inventory-services.md) for implemented calls.
 
 ## History and analytical limits
 

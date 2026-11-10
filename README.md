@@ -1,12 +1,14 @@
 # PatchLedger
 
 Cybersecurity exposure intelligence through operational simulation, data
-warehousing, BI and AI. Currently implemented: **Milestone 1, database foundation
-only**. No operational domain tables, enterprise simulator, FastAPI application,
-intelligence ingestion or warehouse pipelines are implemented.
+warehousing, BI and AI. Currently implemented: **Milestones 1–2, database foundation
+and enterprise inventory**. Seven operational tables and transactional inventory
+services exist. Scanning, findings, remediation, the enterprise simulator,
+FastAPI application, intelligence ingestion and warehouse pipelines are future work.
 
 - [OLTP architecture and 15-table ERD](docs/architecture/operational-database.md)
 - [Implementation milestones and acceptance criteria](docs/architecture/implementation-plan.md)
+- [Runnable Python inventory service examples](docs/architecture/inventory-services.md)
 
 ## Developer setup
 
@@ -27,7 +29,7 @@ Requirements: Python 3.12, uv, Docker and Docker Compose.
    docker compose up -d --wait postgres
    ```
 
-4. Apply the foundation migration from the repository root:
+4. Apply both migrations from the repository root:
 
    ```sh
    uv run alembic upgrade head
@@ -41,9 +43,40 @@ other project keys are allowed. Credentials are excluded from settings repr and
 validation error text. Do not log raw settings URLs or structured validation
 errors containing inputs.
 
-The first revision creates only the `operational` schema. Alembic keeps its version
-table in `public`. Connections use UTC; all future business event timestamps must
-be explicitly supplied and timezone-aware.
+Revision `0001_operational_schema` creates the namespace; `0002` creates the seven
+inventory tables. Alembic keeps its version table in `public`. Connections use UTC;
+business event timestamps must be explicitly supplied and timezone-aware.
+
+## Optional dependencies
+
+The default `uv sync --locked --dev` installs the operational database and
+configuration dependencies plus pytest and Ruff. CI uses this same command.
+Future components have optional extras:
+
+| Extra | Packages | Intended use |
+| --- | --- | --- |
+| `etl` | pandas, NumPy, PyArrow, HTTPX, Requests | Future transformation and external ingestion |
+| `ml` | scikit-learn, PyTorch | Future machine learning |
+| `api` | FastAPI, Uvicorn with standard extras | Possible future API components |
+
+Install an extra when working on that component:
+
+```sh
+uv sync --locked --dev --extra etl
+uv sync --locked --dev --extra ml
+uv sync --locked --dev --extra api
+```
+
+Repeat `--extra` to combine components, for example
+`uv sync --locked --dev --extra etl --extra ml`. Select the same extras when using
+`uv run`, for example `uv run --extra etl python your_ingestion_script.py` once
+such a script exists. These dependencies do not implement the planned components.
+PyTorch's platform-specific CUDA dependencies may be installed with `ml`.
+
+The shared `uv.lock` includes optional packages for reproducibility; their presence
+in the lockfile does not mean they are installed by default. Run
+`uv sync --locked --dev` to return to the core development environment. Structlog,
+mypy and pytest-cov are omitted because current code and checks do not use them.
 
 ## Migrations
 
@@ -63,16 +96,18 @@ revision with `uv run alembic revision --autogenerate -m "describe change"`.
 Autogeneration is limited to `operational`. It intentionally reports unknown
 objects there as drift; it ignores unrelated schemas. Always review generated DDL.
 
-On a disposable development database, the foundation round trip is:
+On a disposable database, the full round trip is:
 
 ```sh
 uv run alembic downgrade base
 uv run alembic upgrade head
 ```
 
-Downgrade drops `operational` without CASCADE. It fails if unknown objects remain;
-it does not delete them. Upgrade fails if an unmanaged `operational` schema already
-exists. Do not stamp/adopt an existing schema without checking ownership and DDL.
+Downgrading `0002` removes its seven tables and their data. Downgrading `0001`
+drops `operational` without CASCADE and fails if unknown objects remain. Tests
+exercise both steps in disposable databases. Upgrade fails if an unmanaged
+`operational` schema already exists. Do not stamp/adopt an existing schema without
+checking ownership and DDL.
 
 ## Transactions without HTTP
 
@@ -87,7 +122,7 @@ engine = make_engine(Settings().sqlalchemy_url)
 sessions = make_session_factory(engine)
 try:
     with sessions.begin() as session:
-        # Future services accept this session and domain inputs.
+        # Inventory services accept this session and domain inputs.
         # They can flush, but must not commit independently.
         pass
 finally:
@@ -120,10 +155,10 @@ leave a UUID-named test database for manual cleanup. CI supplies PostgreSQL 17 a
 requires all integration tests.
 
 Integration tests cover upgrade/downgrade/re-upgrade, schema scoping, noncascading
-downgrade, existing-schema refusal and session commit/rollback. Test-only probe
-tables exist exclusively in disposable test databases. Inventory overlap,
-concurrent-upgrade and verification lifecycle tests belong to later milestones
-when those tables/services exist.
+downgrade, existing-schema refusal and session commit/rollback. Inventory tests
+exercise database constraints, typed asset history, version lifecycles, historical
+lookup, backdated-change rejection and concurrent upgrades. All fixture data and
+test-only probe tables exist exclusively in disposable test databases.
 
-The simulator CLI is planned for Milestone 5, not available yet. FastAPI remains
-installed for possible future analytical use; no OLTP API work is planned.
+The simulator CLI is planned for Milestone 5, not available yet. FastAPI is
+available through the optional `api` extra; no OLTP API work is planned.

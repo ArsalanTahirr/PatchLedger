@@ -4,7 +4,7 @@ No milestone includes an operational FastAPI application. Keep existing optional
 dependencies/scaffolding. All tables below are planned until their milestone is
 implemented. Integration tests accompany each increment.
 
-## Milestone 1 — Database foundation (current scope)
+## Milestone 1 — Database foundation (completed)
 
 - Package the existing `src/patchledger` tree for `uv run` imports.
 - Add explicit configuration, SQLAlchemy Base, engine and session factories.
@@ -19,9 +19,9 @@ Acceptance: fresh upgrade, downgrade and re-upgrade succeed; downgrade does not
 cascade-delete objects; unrelated schemas survive and produce no autogenerate
 changes; service transaction contexts commit/rollback as expected; unit and real
 PostgreSQL tests pass; Ruff passes. No domain tables, simulator, HTTP or warehouse
-implementation. Stop for review after this milestone.
+implementation in that milestone.
 
-## Milestone 2 — Enterprise inventory
+## Milestone 2 — Enterprise inventory (implemented; review boundary)
 
 Implement departments, assets, asset events, products, product identifiers,
 installations and installation history, plus focused inventory services.
@@ -30,7 +30,18 @@ Acceptance: stable identities, atomic snapshot history, correct upgrades,
 downgrades and removals; invalid periods rejected; concurrent upgrades on two
 connections serialize and stale expectations fail; test backdated gaps/overlaps
 and rollback. Preserve historical department assignment/criticality, explicitly
-without a department-name history subsystem.
+without a department-name history subsystem. Revision `0002` depends on the
+unchanged `0001_operational_schema` and creates exactly seven inventory tables.
+
+Implementation choices: reject earlier-gap/backdated rewrites; require expected
+current history IDs on upgrade/downgrade/removal; lock asset then installation;
+remove software explicitly before asset retirement. Typed asset snapshots and
+installation start/end provenance preserve business versus recording times.
+ORM identity/history guards supplement ordinary database constraints, without
+triggers. All service transactions remain caller-owned.
+
+Stop after this milestone. No scanning, finding, remediation or simulator
+implementation is included. Runnable examples are in `inventory-services.md`.
 
 ## Milestone 3 — Vulnerability assessment
 
