@@ -1,0 +1,314 @@
+# Operational database architecture
+
+Status: the 15-table baseline is approved in principle. Only Milestone 1 is
+implemented. The entities below are a design, not existing database tables.
+
+## Scope and boundaries
+
+```mermaid
+flowchart LR
+    S[Python enterprise simulator] --> T[Transactional SQLAlchemy services]
+    T --> O[PostgreSQL operational schema]
+    O --> E[Future operational extraction]
+    E --> B[Future Bronze / Silver / Gold]
+    B --> A[Future AI modules and Power BI]
+```
+
+There is no operational FastAPI application. Services accept a SQLAlchemy session
+and domain inputs and raise Python exceptions. No HTTP schemas, routers,
+authentication, pagination, dependency injection, or operational web interface are
+needed. Existing FastAPI dependencies and empty API scaffolding are retained for
+possible future analytical functionality. Removing HTTP creates **no schema
+dependency or domain-table change**.
+
+NVD, EPSS, KEV, ingestion, warehouse transformations, simulation, and AI are future
+work. Alembic owns operational DDL, not analytical transformations. AI can run as
+Python modules without an API.
+
+## Retained baseline
+
+All domain primary keys are UUIDs. All business timestamps are timezone-aware.
+Current state uses `created_at`/`updated_at`; historical records distinguish
+`occurred_at` (business/simulated time) from `recorded_at` (actual insertion time).
+Required fields use NOT NULL. Use named checks, foreign keys with RESTRICT
+deletion, text statuses with checks, and indexes for operational access paths.
+Retire entities instead of cascading away their history. Small JSONB evidence
+objects are allowed; business relationships are relational.
+
+| Table | Purpose and principal constraints |
+| --- | --- |
+| `departments` | Stable department ID, unique nonrecycled code, current name, retirement time. |
+| `assets` | Unique immutable asset key; hostname, department FK, owner reference, type/environment, criticality 1–5, exposure, lifecycle and registration/retirement times. Index department/status. |
+| `asset_events` | Append-only typed snapshots of asset attributes including department FK and criticality; unique `(asset_id, event_number)`; business and insertion times. Registration creates the initial snapshot. |
+| `software_products` | Unique product key, name, publisher text and ecosystem; product names are not matching keys. No separate vendor or release catalog. |
+| `product_identifiers` | Product FK, scheme and identifier; unique `(product_id, scheme, identifier)`; lookup index on scheme/identifier. Identifiers are candidate associations, not vulnerability proof. |
+| `software_installations` | Stable installation identity, asset/product FKs, context key; unique `(asset_id, installation_key)`. Remains stable across upgrades of the same logical installation. |
+| `installation_history` | Installation FK, exact version and qualifiers, start/end times, timestamp basis, end reason and recording times. At most one open period per installation; positive-duration closed periods. |
+| `scan_runs` | One asset per run; source, producer version, external run key, optional batch key, synthetic flag, scope, status and times. Unique `(source_key, external_run_key, asset_id)`. |
+| `scan_observations` | Immutable CVE/test/outcome/evidence, scan FK, optional installation/history/finding FKs; unique `(scan_run_id, external_observation_key)` and payload digest. Scoped history FK ensures version belongs to installation. Positive installation evidence requires the assessed version. |
+| `vulnerability_findings` | Stable asset/optional-installation/CVE identity; `open` or `resolved`, first/last positive observation, current opening/resolution times and SLA. Unique `(asset_id, installation_id, cve_id) NULLS NOT DISTINCT`; scoped installation/asset FK. |
+| `finding_events` | Append-only opened/resolved/reopened/SLA-change transitions with resulting status and SLA snapshot; unique `(finding_id, event_number)` and `(finding_id, operation_id)`. An opening event identifies an occurrence. |
+| `remediation_tasks` | Unique task key, owner department FK, assignee reference, goal (eliminate/mitigate), priority, due date, estimate, current status and timestamps. |
+| `task_findings` | Task/finding FKs and scoped opening-event FK; unique `(task_id, finding_id, opening_event_id)`. Withdrawal retains reason/time. Old-cycle work cannot silently target a recurrence. |
+| `remediation_events` | Typed append-only task snapshots and action-result events, assignment/status/deadline changes, actor, times, target and before/after installation-history FKs. Unique task event number/key and action attempt key. One action attempt targets one asset/installation and may address several CVEs. |
+| `verification_results` | Immutable evidence decisions with finding/opening-event FKs, optional observation/task-link/action-event FKs, method/verdict, evidence and decision times, verifier, operation ID and digest. Unique `(finding_id, operation_id)`; at most one accepted absence per opening event. |
+
+Use candidate keys such as `(id, asset_id)` and `(id, finding_id)` for scoped
+foreign keys. The service also checks matching CVE, asset and action scope. CVEs
+remain strings matching `^CVE-[0-9]{4}-[0-9]{4,}$`, without intelligence-table FKs.
+Actor/assignee references are stable namespaced strings, not a local identity
+directory. Ordinary mutations and historical inserts commit together.
+
+## ERD
+
+```mermaid
+erDiagram
+    departments {
+        uuid id PK
+        text code UK
+    }
+    assets {
+        uuid id PK
+        uuid department_id FK
+        text asset_key UK
+    }
+    asset_events {
+        uuid id PK
+        uuid asset_id FK
+        uuid department_id FK
+        int event_number
+    }
+    software_products {
+        uuid id PK
+        text product_key UK
+    }
+    product_identifiers {
+        uuid id PK
+        uuid product_id FK
+    }
+    software_installations {
+        uuid id PK
+        uuid asset_id FK
+        uuid product_id FK
+    }
+    installation_history {
+        uuid id PK
+        uuid installation_id FK
+        text version
+    }
+    scan_runs {
+        uuid id PK
+        uuid asset_id FK
+    }
+    scan_observations {
+        uuid id PK
+        uuid scan_run_id FK
+        uuid installation_id FK
+        uuid installation_history_id FK
+        uuid finding_id FK
+    }
+    vulnerability_findings {
+        uuid id PK
+        uuid asset_id FK
+        uuid installation_id FK
+        text cve_id
+    }
+    finding_events {
+        uuid id PK
+        uuid finding_id FK
+        uuid operation_id
+    }
+    remediation_tasks {
+        uuid id PK
+        uuid owner_department_id FK
+    }
+    task_findings {
+        uuid id PK
+        uuid task_id FK
+        uuid finding_id FK
+        uuid opening_event_id FK
+    }
+    remediation_events {
+        uuid id PK
+        uuid task_id FK
+        uuid owner_department_id FK
+        uuid target_asset_id FK
+        uuid installation_id FK
+        uuid before_history_id FK
+        uuid after_history_id FK
+    }
+    verification_results {
+        uuid id PK
+        uuid finding_id FK
+        uuid opening_event_id FK
+        uuid observation_id FK
+        uuid task_finding_id FK
+        uuid action_event_id FK
+        uuid operation_id
+    }
+    departments ||--o{ assets : owns
+    assets ||--|{ asset_events : records
+    departments ||--o{ asset_events : historical_owner
+    software_products ||--o{ product_identifiers : identifies
+    assets ||--o{ software_installations : hosts
+    software_products ||--o{ software_installations : installed_as
+    software_installations ||--o{ installation_history : versions
+    assets ||--o{ scan_runs : assessed_by
+    scan_runs ||--o{ scan_observations : produces
+    software_installations o|--o{ scan_observations : assessed_instance
+    installation_history o|--o{ scan_observations : assessed_version
+    assets ||--o{ vulnerability_findings : affected_by
+    software_installations o|--o{ vulnerability_findings : scopes
+    vulnerability_findings o|--o{ scan_observations : evidence_for
+    vulnerability_findings ||--|{ finding_events : transitions
+    departments ||--o{ remediation_tasks : owns
+    remediation_tasks ||--o{ task_findings : addresses
+    vulnerability_findings ||--o{ task_findings : targeted_by
+    finding_events ||--o{ task_findings : opening
+    remediation_tasks ||--|{ remediation_events : records
+    departments ||--o{ remediation_events : historical_owner
+    assets o|--o{ remediation_events : action_target
+    software_installations o|--o{ remediation_events : action_target
+    installation_history o|--o{ remediation_events : before
+    installation_history o|--o{ remediation_events : after
+    vulnerability_findings ||--o{ verification_results : verified_by
+    finding_events ||--o{ verification_results : opening
+    scan_observations o|--o{ verification_results : evidence
+    task_findings o|--o{ verification_results : requested_for
+    remediation_events o|--o{ verification_results : evaluates
+```
+
+## Verification correction and transaction contract
+
+The one necessary baseline correction is to **remove
+`verification_results.resolution_event_id`**. The accepted decision and its
+resolution event instead carry the same `operation_id`. The existing
+verification-to-opening-event FK remains. Do not add a reverse
+finding-event-to-verification FK: that would create a dependency cycle, directly
+or through task links. There are no current-state verification pointers.
+
+The operation ID correlates two records; it is deliberately not a cross-table FK.
+Uniqueness rejects duplicate records on each side. A transactional service and
+integration tests enforce that an accepted absence decision has exactly one
+matching resolution event, with the same finding and business time. This is an
+explicit service-level guarantee, not a claim that arbitrary SQL enforces the
+entire workflow.
+
+One command owns one transaction:
+
+1. Lock the finding and identify its current opening event. Validate the
+   operation key/digest; return the previous result on an identical retry and
+   reject a conflicting retry.
+2. Validate evidence: target/CVE/occurrence agree, the asset scan completed, the
+   relevant assessment completed, and evidence is newer than the latest positive
+   observation and applicable action. No later inventory change may invalidate
+   the evidence. `target_absent` requires explicit complete inventory evidence.
+3. Insert the verification decision first. Failure/inconclusive/mitigation
+   decisions preserve the finding's open status. A manual decision requires
+   reviewable evidence and an explicitly identified verifier.
+4. For accepted absence only, update the finding to resolved and append a
+   `resolved` event with the same operation ID. `resolved_at` is the supported
+   evidence time; `verified_at` is when the decision was made in business time.
+5. Commit all changes together. Any exception rolls back the decision, current
+   state and event. Do not commit between service calls.
+
+Task completion is not resolution. An eliminate task closes only when all active
+target occurrences have accepted absence decisions. A mitigate task may close
+with currently valid mitigation evidence while the findings remain open.
+Expired evidence cannot establish current mitigation effectiveness.
+
+Repeated positive observations update the same finding. A positive observation
+after resolution reopens it with a new opening event. Old task links and decisions
+remain bound to their old opening event. Missing observations, failed/partial
+scans, asset retirement and inventory removal do not imply resolution.
+
+Services use focused functions/classes, never a generic repository framework.
+They accept a session, timezone-aware business timestamps, stable operation IDs,
+provenance and domain inputs; they may flush but must not independently commit.
+The runner/application command opens `session_factory.begin()` and calls the
+needed services. Nested calls share that session. Domain exceptions will include
+invalid transitions, invalid evidence, conflicting idempotency keys and invalid
+inventory periods; these belong to later milestones. No HTTP adapter is needed.
+
+## Installation-period enforcement
+
+Keep half-open intervals `[started_at, ended_at)`, with null end meaning current.
+The database checks positive duration and permits only one open period. An
+upgrade/downgrade/removal service locks the stable installation row with
+`SELECT FOR UPDATE` **before reading its periods**, validates the proposed
+timeline, and atomically closes/inserts periods. All writers lock the same parent.
+
+Use the caller's expected current history ID to reject stale competing upgrades.
+For a backdated change, inspect all affected periods, not just the current row.
+Reject overlaps and ordinary requests that would require rewriting a later
+recorded transition. A nonoverlapping historical insertion into a genuine gap may
+be accepted explicitly. Adjacency is allowed; zero-length periods are not.
+
+No exclusion constraint or extension is used initially. This only guarantees
+nonoverlap when all writers follow the locking/validation contract. Raw SQL,
+bulk imports bypassing services, or code locking a different row can insert
+overlapping **closed** periods despite the ordinary constraints. Administrative
+corrections need explicit review and the same timeline validation. Reconsider an
+exclusion constraint if independent writers are introduced.
+
+Milestone 2 tests must cover concurrent upgrades on separate connections, stale
+expected-version rejection, adjacent periods, removal/reinstallation, valid gap
+insertion, backdated overlap with closed periods, overlapping current periods,
+and complete rollback after an injected failure.
+
+## History and analytical limits
+
+Asset snapshots preserve department **assignments**, ownership, criticality,
+exposure and lifecycle at each event. They reference stable department IDs.
+Department-name history is not retained: a future DimAsset SCD Type 2 can reflect
+historical assignments and criticality, but historical department labels cannot
+be reconstructed after a rename. DimDepartment initially has current labels.
+Product-description history is similarly outside the initial scope.
+
+Finding opening/resolution/reopening events retain known exposure intervals,
+recurrence and SLA snapshots; task events retain deadline/status changes and
+attempt outcomes. SLA extensions are explicit events and do not erase original
+deadlines. Task reassignment does not reset detection-based SLAs.
+
+Scans are point observations, not continuous measurements. First-observed software
+times are not necessarily installation times. A patch followed by resolution is
+an association, not causal proof. Late source evidence retains its source time;
+it must not silently create a false recurrence or rewrite past transitions.
+Retrospective corrections require an explicit procedure. This is not full event
+sourcing or a complete bitemporal model.
+
+Future extraction uses stable IDs, consistent snapshots, both kinds of timestamps
+and reconciliation. A maximum insertion timestamp/allocated sequence alone is not
+a reliable commit-order checkpoint. No ETL or warehouse objects exist yet.
+
+## Future simulator contract
+
+The simulator will generate departments, hundreds of assets, inventories, repeated
+assessments, remediation tasks, failed/successful patch attempts and verification
+over a configurable timeline, such as 30–90 simulated days. All writes use the
+same services as integration tests. No arbitrary simulator table writes.
+
+Configuration will include scenario ID/version, seed, enterprise size and an
+explicit timezone-aware date range. A stable ordered event schedule, deterministic
+random generator, operation IDs derived from scenario/event identity, and stable
+fixture inputs make logical results reproducible. Replaying the same scenario
+namespace is idempotent; a new experiment uses a new namespace. Recording times
+will differ across independent executions even when business events are identical.
+Never use wall-clock defaults for simulated business events. Both simulated
+decision time and actual insertion time are retained.
+
+Until validated NVD CPE/version applicability exists, use explicitly labelled,
+versioned fixture associations for integration/end-to-end scenarios. Never infer
+software applicability by randomly assigning real CVEs. Fixture provenance and
+synthetic event flags distinguish operational simulation from real NVD/EPSS/KEV
+source data. No matching engine or external ingestion is implemented here.
+
+The eventual documented interface is planned as
+`uv run python -m patchledger.simulation.runner --scenario ... --seed ... --start ... --end ... --assets ...`.
+It does not exist in Milestone 1. Only introduce simulator modules when their
+functionality is implemented.
+
+## References
+
+- [SQLAlchemy session transaction boundaries](https://docs.sqlalchemy.org/en/20/orm/session_basics.html#framing-out-a-begin-commit-rollback-block)
+- [Alembic autogeneration and schema filtering](https://alembic.sqlalchemy.org/en/latest/autogenerate.html#controlling-what-to-be-autogenerated)

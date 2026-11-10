@@ -13,6 +13,7 @@ dependencies = [
     "psycopg[binary]>=3.3.8",
     "pyarrow>=26.0.1",
     "pydantic-settings>=2.16.2",
+    "python-dotenv>=1.2.4",
     "requests>=2.34.2",
     "scikit-learn>=1.9.1",
     "sqlalchemy>=2.1.8",
@@ -28,3 +29,20 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.17.4",
 ]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["patchledger*"]
+namespaces = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers --tb=short"
+markers = ["integration: requires PostgreSQL and creates isolated test databases"]
+
+[tool.ruff]
+target-version = "py312"

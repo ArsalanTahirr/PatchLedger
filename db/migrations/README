@@ -1,0 +1,4 @@
+Operational PostgreSQL schema migrations only.
+
+See ../../README.md for setup, migration and test commands.
+Analytical transformations do not belong in this migration lineage.
