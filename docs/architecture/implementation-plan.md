@@ -1,7 +1,9 @@
 # Operational implementation plan
 
 No milestone includes an operational FastAPI application. Keep existing optional
-dependencies/scaffolding. Milestones 1–4 are implemented; the simulator remains planned. Integration tests accompany each increment.
+dependencies/scaffolding. Milestones 1–4 are implemented. Milestone 5's simulator
+is implemented with PostgreSQL validation pending under workspace restrictions.
+Integration tests accompany each increment.
 
 ## Milestone 1 — Database foundation (completed)
 
@@ -119,21 +121,47 @@ state and resolution event commit atomically under a shared operation ID;
 injected failures roll back everything; old-cycle/stale evidence is rejected;
 retry does not duplicate resolution; eliminate/mitigate closure rules differ.
 
-Stop after Milestone 4 for review. The simulator and all external/analytical/ML
-components remain unimplemented. See `remediation-services.md`.
+Milestone 4 added remediation/verification only; see `remediation-services.md`.
+The simulator is added separately below. External/analytical/ML components remain
+unimplemented.
 
-## Milestone 5 — Python enterprise simulator
+## Milestone 5 — Python enterprise simulator (implemented; validation pending)
 
-Introduce configuration, generators, scenarios and runner only as implemented.
-Use reusable transactional services, deterministic seeds and stable scenario IDs.
-Support configurable assets, software inventory and simulated dates, assessment,
-recurrence, tasks, SLA timing, patch success/failure and verification.
+`src/patchledger/simulation/` provides typed configuration, independent seeded
+streams, pure enterprise/event plans, a separate synthetic applicability catalog,
+service-only execution and persisted reporting/audits. The CLI supports JSON
+configuration and a database-free `--plan` mode. Defaults are 400 assets, five
+installations per asset and 90 simulated days; no NumPy or new dependency is used.
+
+Recipes cover initial inventory, periodic complete/partial/failed scans, explicit
+positive/negative/inconclusive observations, multi-target tasks, failed and
+ineffective/successful patches, explicit verification/closure, recurrence backlog,
+removal/reinstallation, criticality changes and final suspension/retirement.
+Everything remains synthetic; no real applicability or threat scores are invented.
+
+Configuration/fixture fingerprints in registration provenance reject conflicting
+scenario reuse. PostgreSQL advisory locks isolate scenario runners. Historical
+periods/opening events and service operation keys support identical replay and
+recovery after a rolled-back workflow. Setup uses batches of at most 25 assets;
+scheduled workflows have bounded caller-owned transactions. No bookkeeping table,
+schema/migration change or operational business-logic change is introduced.
 
 Acceptance: documented `uv run` CLI works without an HTTP server; same seed,
 scenario version and inputs yield the same logical timeline; replay is idempotent;
 business timestamps follow the simulated clock while recording timestamps reflect
 insertion; integration fixtures label applicability; end-to-end tests and data
 quality checks cover history, FK consistency, no overlaps and valid transitions.
+
+Unit/planning checks run in the workspace. Actual PostgreSQL tests are blocked by
+sandbox TCP permissions; no permissions were weakened or server version replaced.
+Small end-to-end, cross-database reproducibility, retry/recovery and isolation
+tests are provided with the existing disposable fixtures. A medium benchmark is
+opt-in and the full run is excluded from CI. Persisted counts and database replay
+remain unverified until those tests run with PostgreSQL 17 access.
+
+See `enterprise-simulator.md` and `examples/simulation-small.json` for commands,
+configuration, provenance, quality checks and limitations. Stop after Milestone 5;
+do not begin threat intelligence or warehouse implementation.
 
 Future NVD/EPSS/KEV ingestion, Bronze/Silver/Gold, AI and Power BI work is separate.
 No corresponding tables or pipelines are part of these OLTP foundation changes.

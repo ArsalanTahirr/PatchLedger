@@ -1,0 +1,17 @@
+{
+  "scenario": "enterprise-small-v1",
+  "seed": 42,
+  "assets": 12,
+  "installations_per_asset": 3,
+  "start": "2024-01-01T00:00:00+00:00",
+  "days": 14,
+  "scan_interval_days": 2,
+  "sla_days": 2,
+  "remediation_probability": 0.9,
+  "patch_success_probability": 0.55,
+  "ineffective_patch_probability": 0.25,
+  "recurrence_probability": 1.0,
+  "inventory_churn_probability": 1.0,
+  "partial_scan_probability": 0.2,
+  "failed_scan_probability": 0.1
+}
