@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import argparse
@@ -7,14 +6,13 @@ import hashlib
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from dotenv import load_dotenv
-
 
 # Find the project root from this script's location.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -46,7 +44,7 @@ CSV_FIELDS = [
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def json_text(value: object) -> str:
@@ -90,11 +88,7 @@ def get_cvss(cve: dict) -> tuple[str, str, str, str]:
         version = cvss_data.get("version", "")
         source = metric.get("source", "")
         score = cvss_data.get("baseScore", "")
-        severity = (
-            cvss_data.get("baseSeverity")
-            or metric.get("baseSeverity")
-            or ""
-        )
+        severity = cvss_data.get("baseSeverity") or metric.get("baseSeverity") or ""
 
         return str(version), source, str(score), severity
 
@@ -181,12 +175,9 @@ def fetch_page(
                 try:
                     wait_seconds = float(retry_after)
                 except (TypeError, ValueError):
-                    wait_seconds = 2 ** attempt
+                    wait_seconds = 2**attempt
 
-                print(
-                    f"HTTP {error.code}. "
-                    f"Retrying in {wait_seconds:.1f} seconds..."
-                )
+                print(f"HTTP {error.code}. Retrying in {wait_seconds:.1f} seconds...")
                 time.sleep(wait_seconds)
                 continue
 
@@ -196,7 +187,7 @@ def fetch_page(
             if attempt == MAX_RETRIES - 1:
                 raise
 
-            wait_seconds = 2 ** attempt
+            wait_seconds = 2**attempt
             print(f"Network error. Retrying in {wait_seconds} seconds...")
             time.sleep(wait_seconds)
 
@@ -257,15 +248,9 @@ def main() -> None:
         request_delay = 6.5
         print("No NVD API key found. Using a slower request interval.")
 
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%SZ")
+    run_id = datetime.now(UTC).strftime("%Y%m%d_%H%M%SZ")
 
-    run_dir = (
-        PROJECT_ROOT
-        / "data"
-        / "bronze"
-        / "nvd"
-        / f"run_{run_id}"
-    )
+    run_dir = PROJECT_ROOT / "data" / "bronze" / "nvd" / f"run_{run_id}"
 
     pages_dir = run_dir / "pages"
     pages_dir.mkdir(parents=True, exist_ok=True)
@@ -301,7 +286,6 @@ def main() -> None:
             newline="",
             encoding="utf-8-sig",
         ) as csv_file:
-
             writer = csv.DictWriter(
                 csv_file,
                 fieldnames=CSV_FIELDS,
@@ -369,21 +353,20 @@ def main() -> None:
         # Publish the CSV only after the download finishes successfully.
         temp_csv_path.replace(csv_path)
 
-        dataset_complete = (
-            max_records is None
-            and records_downloaded == total_results
-        )
+        dataset_complete = max_records is None and records_downloaded == total_results
 
-        manifest.update({
-            "status": "completed",
-            "completed_at_utc": utc_now(),
-            "records_downloaded": records_downloaded,
-            "pages_downloaded": pages_downloaded,
-            "dataset_complete": dataset_complete,
-            "limited_test": max_records is not None,
-            "csv_file": csv_path.name,
-            "csv_sha256": sha256_file(csv_path),
-        })
+        manifest.update(
+            {
+                "status": "completed",
+                "completed_at_utc": utc_now(),
+                "records_downloaded": records_downloaded,
+                "pages_downloaded": pages_downloaded,
+                "dataset_complete": dataset_complete,
+                "limited_test": max_records is not None,
+                "csv_file": csv_path.name,
+                "csv_sha256": sha256_file(csv_path),
+            }
+        )
 
         write_manifest(manifest_path, manifest)
 
@@ -401,13 +384,15 @@ def main() -> None:
             )
 
     except Exception as error:
-        manifest.update({
-            "status": "failed",
-            "failed_at_utc": utc_now(),
-            "records_downloaded": records_downloaded,
-            "pages_downloaded": pages_downloaded,
-            "error": str(error),
-        })
+        manifest.update(
+            {
+                "status": "failed",
+                "failed_at_utc": utc_now(),
+                "records_downloaded": records_downloaded,
+                "pages_downloaded": pages_downloaded,
+                "error": str(error),
+            }
+        )
 
         write_manifest(manifest_path, manifest)
 
