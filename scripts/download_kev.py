@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import argparse
@@ -6,11 +5,10 @@ import csv
 import hashlib
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -39,7 +37,7 @@ CSV_FIELDS = [
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def json_text(value: object) -> str:
@@ -77,15 +75,14 @@ def download_file(url: str, path: Path) -> None:
 
     for attempt in range(MAX_RETRIES):
         try:
-            with urlopen(request, timeout=120) as response:
-                with path.open("wb") as file:
-                    while True:
-                        chunk = response.read(1024 * 1024)
+            with urlopen(request, timeout=120) as response, path.open("wb") as file:
+                while True:
+                    chunk = response.read(1024 * 1024)
 
-                        if not chunk:
-                            break
+                    if not chunk:
+                        break
 
-                        file.write(chunk)
+                    file.write(chunk)
 
             if path.stat().st_size == 0:
                 raise RuntimeError("Downloaded KEV file is empty.")
@@ -99,12 +96,9 @@ def download_file(url: str, path: Path) -> None:
                 try:
                     wait = float(retry_after)
                 except (TypeError, ValueError):
-                    wait = 2 ** attempt
+                    wait = 2**attempt
 
-                print(
-                    f"HTTP {error.code}. "
-                    f"Retrying in {wait:.1f} seconds..."
-                )
+                print(f"HTTP {error.code}. Retrying in {wait:.1f} seconds...")
 
                 time.sleep(wait)
                 continue
@@ -115,7 +109,7 @@ def download_file(url: str, path: Path) -> None:
             if attempt == MAX_RETRIES - 1:
                 raise
 
-            wait = 2 ** attempt
+            wait = 2**attempt
 
             print(f"Network error. Retrying in {wait} seconds...")
             time.sleep(wait)
@@ -136,17 +130,15 @@ def load_and_validate_json(path: Path) -> dict:
 
     for field in required_fields:
         if field not in catalog:
-            raise ValueError(
-                f"Missing required catalog field: {field}"
-            )
+            raise ValueError(f"Missing required catalog field: {field}")
 
     vulnerabilities = catalog["vulnerabilities"]
 
     if not isinstance(vulnerabilities, list):
-        raise ValueError("KEV vulnerabilities must be a list.")
+        raise TypeError("KEV vulnerabilities must be a list.")
 
     if not isinstance(catalog["count"], int):
-        raise ValueError("KEV catalog count must be an integer.")
+        raise TypeError("KEV catalog count must be an integer.")
 
     if catalog["count"] != len(vulnerabilities):
         raise ValueError(
@@ -172,9 +164,7 @@ def load_and_validate_json(path: Path) -> dict:
     for index, vulnerability in enumerate(vulnerabilities):
         for field in required_record_fields:
             if field not in vulnerability:
-                raise ValueError(
-                    f"Record {index} is missing field: {field}"
-                )
+                raise ValueError(f"Record {index} is missing field: {field}")
 
     return catalog
 
@@ -210,7 +200,6 @@ def convert_to_csv(
         newline="",
         encoding="utf-8-sig",
     ) as file:
-
         writer = csv.DictWriter(
             file,
             fieldnames=CSV_FIELDS,
@@ -219,9 +208,7 @@ def convert_to_csv(
         writer.writeheader()
 
         for vulnerability in vulnerabilities:
-            writer.writerow(
-                flatten_vulnerability(vulnerability)
-            )
+            writer.writerow(flatten_vulnerability(vulnerability))
 
     return len(vulnerabilities)
 
@@ -233,15 +220,9 @@ def main() -> None:
 
     parser.parse_args()
 
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%SZ")
+    run_id = datetime.now(UTC).strftime("%Y%m%d_%H%M%SZ")
 
-    run_dir = (
-        PROJECT_ROOT
-        / "data"
-        / "bronze"
-        / "kev"
-        / f"run_{run_id}"
-    )
+    run_dir = PROJECT_ROOT / "data" / "bronze" / "kev" / f"run_{run_id}"
 
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -283,20 +264,22 @@ def main() -> None:
         temp_json_path.replace(json_path)
         temp_csv_path.replace(csv_path)
 
-        manifest.update({
-            "status": "completed",
-            "completed_at_utc": utc_now(),
-            "catalog_version": catalog["catalogVersion"],
-            "catalog_date_released": catalog["dateReleased"],
-            "catalog_reported_count": catalog["count"],
-            "records_downloaded": records_downloaded,
-            "dataset_complete": True,
-            "original_file": json_path.name,
-            "original_file_size_bytes": json_path.stat().st_size,
-            "original_file_sha256": sha256_file(json_path),
-            "csv_file": csv_path.name,
-            "csv_sha256": sha256_file(csv_path),
-        })
+        manifest.update(
+            {
+                "status": "completed",
+                "completed_at_utc": utc_now(),
+                "catalog_version": catalog["catalogVersion"],
+                "catalog_date_released": catalog["dateReleased"],
+                "catalog_reported_count": catalog["count"],
+                "records_downloaded": records_downloaded,
+                "dataset_complete": True,
+                "original_file": json_path.name,
+                "original_file_size_bytes": json_path.stat().st_size,
+                "original_file_sha256": sha256_file(json_path),
+                "csv_file": csv_path.name,
+                "csv_sha256": sha256_file(csv_path),
+            }
+        )
 
         write_manifest(manifest_path, manifest)
 
@@ -309,11 +292,13 @@ def main() -> None:
         print(f"Manifest: {manifest_path}")
 
     except Exception as error:
-        manifest.update({
-            "status": "failed",
-            "failed_at_utc": utc_now(),
-            "error": str(error),
-        })
+        manifest.update(
+            {
+                "status": "failed",
+                "failed_at_utc": utc_now(),
+                "error": str(error),
+            }
+        )
 
         write_manifest(manifest_path, manifest)
 

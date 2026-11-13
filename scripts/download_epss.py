@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import argparse
@@ -7,11 +6,10 @@ import gzip
 import hashlib
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -23,7 +21,7 @@ EXPECTED_FIELDS = ["cve", "epss", "percentile"]
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def sha256_file(path: Path) -> str:
@@ -53,13 +51,12 @@ def download_file(url: str, path: Path) -> None:
 
     for attempt in range(MAX_RETRIES):
         try:
-            with urlopen(request, timeout=120) as response:
-                with path.open("wb") as file:
-                    while True:
-                        chunk = response.read(1024 * 1024)
-                        if not chunk:
-                            break
-                        file.write(chunk)
+            with urlopen(request, timeout=120) as response, path.open("wb") as file:
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    file.write(chunk)
 
             if path.stat().st_size == 0:
                 raise RuntimeError("Downloaded EPSS file is empty.")
@@ -68,7 +65,7 @@ def download_file(url: str, path: Path) -> None:
 
         except HTTPError as error:
             if error.code == 429 or error.code >= 500:
-                wait = 2 ** attempt
+                wait = 2**attempt
                 print(f"HTTP {error.code}. Retrying in {wait} seconds...")
                 time.sleep(wait)
                 continue
@@ -78,7 +75,7 @@ def download_file(url: str, path: Path) -> None:
             if attempt == MAX_RETRIES - 1:
                 raise
 
-            wait = 2 ** attempt
+            wait = 2**attempt
             print(f"Network error. Retrying in {wait} seconds...")
             time.sleep(wait)
 
@@ -93,7 +90,6 @@ def convert_to_csv(
     metadata_line = ""
 
     with gzip.open(gzip_path, "rt", encoding="utf-8-sig", newline="") as source:
-
         first_line = source.readline()
 
         if first_line.startswith("#"):
@@ -109,16 +105,13 @@ def convert_to_csv(
             raise ValueError("EPSS CSV has no header.")
 
         if headers != EXPECTED_FIELDS:
-            raise ValueError(
-                f"Unexpected EPSS columns: {headers}"
-            )
+            raise ValueError(f"Unexpected EPSS columns: {headers}")
 
         with csv_path.open(
             "w",
             newline="",
             encoding="utf-8-sig",
         ) as output:
-
             writer = csv.DictWriter(
                 output,
                 fieldnames=EXPECTED_FIELDS,
@@ -128,9 +121,7 @@ def convert_to_csv(
 
             for row in reader:
                 if len(row) != len(EXPECTED_FIELDS):
-                    raise ValueError(
-                        f"Invalid EPSS row: {row}"
-                    )
+                    raise ValueError(f"Invalid EPSS row: {row}")
 
                 writer.writerow(dict(zip(EXPECTED_FIELDS, row)))
                 records_downloaded += 1
@@ -143,17 +134,11 @@ def main() -> None:
         description="Download complete EPSS data into PatchLedger Bronze."
     )
 
-    args = parser.parse_args()
+    parser.parse_args()
 
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%SZ")
+    run_id = datetime.now(UTC).strftime("%Y%m%d_%H%M%SZ")
 
-    run_dir = (
-        PROJECT_ROOT
-        / "data"
-        / "bronze"
-        / "epss"
-        / f"run_{run_id}"
-    )
+    run_dir = PROJECT_ROOT / "data" / "bronze" / "epss" / f"run_{run_id}"
 
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -196,18 +181,20 @@ def main() -> None:
         temp_gzip_path.replace(gzip_path)
         temp_csv_path.replace(csv_path)
 
-        manifest.update({
-            "status": "completed",
-            "completed_at_utc": utc_now(),
-            "records_downloaded": records_downloaded,
-            "dataset_complete": True,
-            "source_metadata": metadata_line,
-            "original_file": gzip_path.name,
-            "original_file_size_bytes": gzip_path.stat().st_size,
-            "original_file_sha256": sha256_file(gzip_path),
-            "csv_file": csv_path.name,
-            "csv_sha256": sha256_file(csv_path),
-        })
+        manifest.update(
+            {
+                "status": "completed",
+                "completed_at_utc": utc_now(),
+                "records_downloaded": records_downloaded,
+                "dataset_complete": True,
+                "source_metadata": metadata_line,
+                "original_file": gzip_path.name,
+                "original_file_size_bytes": gzip_path.stat().st_size,
+                "original_file_sha256": sha256_file(gzip_path),
+                "csv_file": csv_path.name,
+                "csv_sha256": sha256_file(csv_path),
+            }
+        )
 
         write_manifest(manifest_path, manifest)
 
@@ -219,11 +206,13 @@ def main() -> None:
         print(f"Manifest: {manifest_path}")
 
     except Exception as error:
-        manifest.update({
-            "status": "failed",
-            "failed_at_utc": utc_now(),
-            "error": str(error),
-        })
+        manifest.update(
+            {
+                "status": "failed",
+                "failed_at_utc": utc_now(),
+                "error": str(error),
+            }
+        )
 
         write_manifest(manifest_path, manifest)
 
