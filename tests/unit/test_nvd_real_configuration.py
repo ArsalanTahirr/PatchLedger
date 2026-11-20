@@ -6,7 +6,6 @@ from patchledger.simulation.nvd_applicability_v2 import (
     evaluate_nvd_configurations,
 )
 
-
 FASPEX_RULE = {
     "vulnerable": True,
     "criteria": "cpe:2.3:a:ibm:aspera_faspex:*:*:*:*:*:*:*:*",
@@ -19,36 +18,34 @@ LINUX_RULE = {
     "criteria": "cpe:2.3:o:linux:linux_kernel:-:*:*:*:*:*:*:*",
 }
 
-CONFIG = [{
-    "nodes": [{
-        "operator": "AND",
+CONFIG = [
+    {
         "nodes": [
             {
-                "operator": "OR",
-                "negate": False,
-                "cpeMatch": [FASPEX_RULE],
-            },
-            {
-                "operator": "OR",
-                "negate": False,
-                "cpeMatch": [LINUX_RULE],
-            },
+                "operator": "AND",
+                "nodes": [
+                    {
+                        "operator": "OR",
+                        "negate": False,
+                        "cpeMatch": [FASPEX_RULE],
+                    },
+                    {
+                        "operator": "OR",
+                        "negate": False,
+                        "cpeMatch": [LINUX_RULE],
+                    },
+                ],
+            }
         ],
-    }],
-}]
+    }
+]
 
 
 def faspex(version):
-    return (
-        f"cpe:2.3:a:ibm:aspera_faspex:{version}"
-        ":-:-:-:-:-:-:-"
-    )
+    return f"cpe:2.3:a:ibm:aspera_faspex:{version}:-:-:-:-:-:-:-"
 
 
-LINUX = (
-    "cpe:2.3:o:linux:linux_kernel:-"
-    ":-:-:-:-:-:-:-"
-)
+LINUX = "cpe:2.3:o:linux:linux_kernel:-:-:-:-:-:-:-:-"
 
 
 @pytest.mark.parametrize(
@@ -63,9 +60,7 @@ LINUX = (
         ([LINUX], True, False),
     ],
 )
-def test_real_faspex_linux_configuration(
-    inventory, complete, expected
-):
+def test_real_faspex_linux_configuration(inventory, complete, expected):
     result = evaluate_nvd_configurations(
         CONFIG,
         inventory,

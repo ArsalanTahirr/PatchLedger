@@ -6,34 +6,32 @@ from patchledger.simulation.nvd_applicability_v2 import (
     evaluate_nvd_configurations,
 )
 
-
-CONFIG = [{
-    "nodes": [{
-        "operator": "OR",
-        "cpeMatch": [
+CONFIG = [
+    {
+        "nodes": [
             {
-                "vulnerable": False,
-                "criteria":
-                    "cpe:2.3:o:example:linux:-:*:*:*:*:*:*:*",
-            },
-            {
-                "vulnerable": True,
-                "criteria":
-                    "cpe:2.3:a:example:app:*:*:*:*:*:*:*:*",
-                "versionEndExcluding": "2.0",
-            },
+                "operator": "OR",
+                "cpeMatch": [
+                    {
+                        "vulnerable": False,
+                        "criteria": "cpe:2.3:o:example:linux:-:*:*:*:*:*:*:*",
+                    },
+                    {
+                        "vulnerable": True,
+                        "criteria": "cpe:2.3:a:example:app:*:*:*:*:*:*:*:*",
+                        "versionEndExcluding": "2.0",
+                    },
+                ],
+            }
         ],
-    }],
-}]
+    }
+]
 
 LINUX = "cpe:2.3:o:example:linux:-:-:-:-:-:-:-:-"
 
 
 def app(version):
-    return (
-        f"cpe:2.3:a:example:app:{version}"
-        ":-:-:-:-:-:-:-"
-    )
+    return f"cpe:2.3:a:example:app:{version}:-:-:-:-:-:-:-"
 
 
 @pytest.mark.parametrize(
@@ -55,18 +53,20 @@ def test_or_branch(inventory, complete, expected):
 
 
 def test_unsupported_operator_remains_inconclusive():
-    config = [{
-        "nodes": [
-            {
-                "operator": "OR",
-                "cpeMatch": [CONFIG[0]["nodes"][0]["cpeMatch"][0]],
-            },
-            {
-                "operator": "XOR",
-                "cpeMatch": [CONFIG[0]["nodes"][0]["cpeMatch"][1]],
-            },
-        ],
-    }]
+    config = [
+        {
+            "nodes": [
+                {
+                    "operator": "OR",
+                    "cpeMatch": [CONFIG[0]["nodes"][0]["cpeMatch"][0]],
+                },
+                {
+                    "operator": "XOR",
+                    "cpeMatch": [CONFIG[0]["nodes"][0]["cpeMatch"][1]],
+                },
+            ],
+        }
+    ]
 
     result = evaluate_nvd_configurations(
         config,
@@ -78,19 +78,21 @@ def test_unsupported_operator_remains_inconclusive():
 
 
 def test_negated_branch_remains_inconclusive():
-    config = [{
-        "nodes": [
-            {
-                "operator": "OR",
-                "cpeMatch": [CONFIG[0]["nodes"][0]["cpeMatch"][0]],
-            },
-            {
-                "operator": "OR",
-                "negate": True,
-                "cpeMatch": [CONFIG[0]["nodes"][0]["cpeMatch"][1]],
-            },
-        ],
-    }]
+    config = [
+        {
+            "nodes": [
+                {
+                    "operator": "OR",
+                    "cpeMatch": [CONFIG[0]["nodes"][0]["cpeMatch"][0]],
+                },
+                {
+                    "operator": "OR",
+                    "negate": True,
+                    "cpeMatch": [CONFIG[0]["nodes"][0]["cpeMatch"][1]],
+                },
+            ],
+        }
+    ]
 
     result = evaluate_nvd_configurations(
         config,

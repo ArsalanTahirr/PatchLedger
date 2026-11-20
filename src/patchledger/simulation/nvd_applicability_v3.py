@@ -21,35 +21,25 @@ def combine(values, operator):
 
     if operator == "AND":
         condition = (
-            False if False in conditions
-            else None if None in conditions
-            else True
+            False if False in conditions else None if None in conditions else True
         )
 
-        affected = (
-            True if True in exposures
-            else None if None in exposures
-            else False
-        )
+        affected = True if True in exposures else None if None in exposures else False
 
         exposure = (
-            False if condition is False or affected is False
-            else None if condition is None or affected is None
+            False
+            if condition is False or affected is False
+            else None
+            if condition is None or affected is None
             else True
         )
 
     else:
         condition = (
-            True if True in conditions
-            else None if None in conditions
-            else False
+            True if True in conditions else None if None in conditions else False
         )
 
-        exposure = (
-            True if True in exposures
-            else None if None in exposures
-            else False
-        )
+        exposure = True if True in exposures else None if None in exposures else False
 
     return Evaluation(
         condition,
@@ -65,14 +55,13 @@ def evaluate_rule(rule, installed_cpes, inventory_complete):
     if type(rule.get("vulnerable")) is not bool:
         return Evaluation(None, None, True)
 
-    results = [
-        match_cpe_criteria(cpe, rule)
-        for cpe in installed_cpes
-    ]
+    results = [match_cpe_criteria(cpe, rule) for cpe in installed_cpes]
 
     condition = (
-        True if True in results
-        else None if None in results or not inventory_complete
+        True
+        if True in results
+        else None
+        if None in results or not inventory_complete
         else False
     )
 
@@ -104,9 +93,7 @@ def evaluate_node(node, installed_cpes, inventory_complete):
         return Evaluation(None, None, True)
 
     for rule in rules:
-        values.append(
-            evaluate_rule(rule, installed_cpes, inventory_complete)
-        )
+        values.append(evaluate_rule(rule, installed_cpes, inventory_complete))
 
     for key in ("nodes", "children"):
         children = node.get(key, [])
@@ -114,9 +101,7 @@ def evaluate_node(node, installed_cpes, inventory_complete):
             return Evaluation(None, None, True)
 
         for child in children:
-            values.append(
-                evaluate_node(child, installed_cpes, inventory_complete)
-            )
+            values.append(evaluate_node(child, installed_cpes, inventory_complete))
 
     return combine(values, operator)
 

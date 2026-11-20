@@ -4,7 +4,6 @@ from patchledger.simulation.nvd_applicability_v2 import (
     evaluate_nvd_configurations,
 )
 
-
 APP = "cpe:2.3:a:example:app:1.0:-:-:-:-:-:-:-"
 OS = "cpe:2.3:o:example:os:10:-:-:-:-:-:-:-"
 
@@ -18,15 +17,19 @@ OS_RULE = {
     "vulnerable": False,
 }
 
-CONFIG = [{
-    "nodes": [{
-        "operator": "AND",
-        "children": [
-            {"operator": "OR", "cpeMatch": [APP_RULE]},
-            {"operator": "OR", "cpeMatch": [OS_RULE]},
+CONFIG = [
+    {
+        "nodes": [
+            {
+                "operator": "AND",
+                "children": [
+                    {"operator": "OR", "cpeMatch": [APP_RULE]},
+                    {"operator": "OR", "cpeMatch": [OS_RULE]},
+                ],
+            }
         ],
-    }],
-}]
+    }
+]
 
 
 @pytest.mark.parametrize(
@@ -49,13 +52,15 @@ def test_platform_dependency(inventory, complete, expected):
 
 
 def test_platform_alone_is_not_vulnerable():
-    config = [{
-        "nodes": [{
-            "operator": "OR",
-            "cpeMatch": [OS_RULE],
-        }],
-    }]
+    config = [
+        {
+            "nodes": [
+                {
+                    "operator": "OR",
+                    "cpeMatch": [OS_RULE],
+                }
+            ],
+        }
+    ]
 
-    assert evaluate_nvd_configurations(
-        config, [OS], inventory_complete=True
-    ) is None
+    assert evaluate_nvd_configurations(config, [OS], inventory_complete=True) is None

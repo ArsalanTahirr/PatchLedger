@@ -38,10 +38,7 @@ def evaluate_rule(rule, installed_cpes, inventory_complete):
     if rule.get("vulnerable") is not True:
         return None
 
-    results = [
-        match_cpe_criteria(cpe, rule)
-        for cpe in installed_cpes
-    ]
+    results = [match_cpe_criteria(cpe, rule) for cpe in installed_cpes]
 
     if True in results:
         return True
@@ -66,15 +63,11 @@ def evaluate_node(node, installed_cpes, inventory_complete):
     results = []
 
     for rule in node.get("cpeMatch", []):
-        results.append(
-            evaluate_rule(rule, installed_cpes, inventory_complete)
-        )
+        results.append(evaluate_rule(rule, installed_cpes, inventory_complete))
 
     for key in ("children", "nodes"):
         for child in node.get(key, []):
-            results.append(
-                evaluate_node(child, installed_cpes, inventory_complete)
-            )
+            results.append(evaluate_node(child, installed_cpes, inventory_complete))
 
     return combine(results, operator)
 

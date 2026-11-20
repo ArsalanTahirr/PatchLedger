@@ -23,10 +23,7 @@ def combine_conditions(results, operator):
     if True in conditions:
         return (
             True,
-            any(
-                condition is True and affected
-                for condition, affected in results
-            ),
+            any(condition is True and affected for condition, affected in results),
         )
 
     if None in conditions:
@@ -42,10 +39,7 @@ def evaluate_rule(rule, installed_cpes, inventory_complete):
     if rule.get("vulnerable") not in (True, False):
         return None, False
 
-    results = [
-        match_cpe_criteria(cpe, rule)
-        for cpe in installed_cpes
-    ]
+    results = [match_cpe_criteria(cpe, rule) for cpe in installed_cpes]
 
     if True in results:
         return True, rule["vulnerable"] is True
@@ -78,9 +72,7 @@ def evaluate_node(node, installed_cpes, inventory_complete):
         return None, False
 
     for rule in rules:
-        results.append(
-            evaluate_rule(rule, installed_cpes, inventory_complete)
-        )
+        results.append(evaluate_rule(rule, installed_cpes, inventory_complete))
 
     for key in ("children", "nodes"):
         children = node.get(key, [])
@@ -88,9 +80,7 @@ def evaluate_node(node, installed_cpes, inventory_complete):
             return None, False
 
         for child in children:
-            results.append(
-                evaluate_node(child, installed_cpes, inventory_complete)
-            )
+            results.append(evaluate_node(child, installed_cpes, inventory_complete))
 
     return combine_conditions(results, operator)
 
@@ -174,26 +164,19 @@ def evaluate_nvd_configurations(
                         return True
 
             for key in ("nodes", "children", "configurations"):
-                if key in value:
-                    if not has_supported_children(value[key]):
-                        return True
+                if key in value and not has_supported_children(value[key]):
+                    return True
 
             return False
 
         def has_supported_children(children):
-            return (
-                isinstance(children, list)
-                and not has_unsupported(children)
-            )
+            return isinstance(children, list) and not has_unsupported(children)
 
         if has_unsupported(configurations):
             return None
 
         if vulnerable_rules and all(
-            all(
-                match_cpe_criteria(cpe, rule) is False
-                for cpe in installed_cpes
-            )
+            all(match_cpe_criteria(cpe, rule) is False for cpe in installed_cpes)
             for rule in vulnerable_rules
         ):
             return False

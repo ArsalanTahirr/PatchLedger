@@ -6,7 +6,6 @@ Unsupported patterns return None, not a guessed match.
 
 from patchledger.simulation.nvd_versions import version_in_range
 
-
 BOUND_KEYS = (
     "versionStartIncluding",
     "versionStartExcluding",
@@ -54,10 +53,7 @@ def parse_cpe(value):
     attributes = fields[2:]
 
     if any(
-        not part
-        or "?" in part
-        or ("*" in part and part != "*")
-        for part in attributes
+        not part or "?" in part or ("*" in part and part != "*") for part in attributes
     ):
         return None
 
@@ -76,9 +72,7 @@ def match_cpe_criteria(installed_cpe, rule):
 
     unknown = False
 
-    for index, (actual, expected) in enumerate(
-        zip(installed, criteria, strict=True)
-    ):
+    for index, (actual, expected) in enumerate(zip(installed, criteria, strict=True)):
         # Version is handled separately.
         if index == 3:
             continue

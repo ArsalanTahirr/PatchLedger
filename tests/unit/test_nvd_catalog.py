@@ -4,8 +4,8 @@ import json
 import pytest
 
 from patchledger.simulation.nvd_catalog import (
-    load_nvd_catalog,
     extract_cpe_matches,
+    load_nvd_catalog,
 )
 
 
@@ -13,16 +13,16 @@ def test_load_nvd_catalog(tmp_path):
     path = tmp_path / "nvd.csv"
 
     with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=["cve_id", "configurations_json"]
-        )
+        writer = csv.DictWriter(f, fieldnames=["cve_id", "configurations_json"])
         writer.writeheader()
-        writer.writerow({
-            "cve_id": "CVE-2026-1000",
-            "configurations_json": json.dumps([
-                {"nodes": [{"operator": "OR", "cpeMatch": []}]}
-            ]),
-        })
+        writer.writerow(
+            {
+                "cve_id": "CVE-2026-1000",
+                "configurations_json": json.dumps(
+                    [{"nodes": [{"operator": "OR", "cpeMatch": []}]}]
+                ),
+            }
+        )
 
     catalog = load_nvd_catalog(path, limit=10)
 
@@ -31,23 +31,32 @@ def test_load_nvd_catalog(tmp_path):
 
 
 def test_extract_nested_cpe():
-    catalog = [{
-        "cve_id": "CVE-2026-1001",
-        "configurations": [{
-            "nodes": [{
-                "operator": "AND",
-                "children": [{
-                    "operator": "OR",
-                    "cpeMatch": [{
-                        "vulnerable": True,
-                        "criteria":
-                            "cpe:2.3:a:google:chrome:*:*:*:*:*:*:*:*",
-                        "versionEndExcluding": "157.0.8103.50",
-                    }],
-                }],
-            }],
-        }],
-    }]
+    catalog = [
+        {
+            "cve_id": "CVE-2026-1001",
+            "configurations": [
+                {
+                    "nodes": [
+                        {
+                            "operator": "AND",
+                            "children": [
+                                {
+                                    "operator": "OR",
+                                    "cpeMatch": [
+                                        {
+                                            "vulnerable": True,
+                                            "criteria": "cpe:2.3:a:google:chrome:*:*:*:*:*:*:*:*",
+                                            "versionEndExcluding": "157.0.8103.50",
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
 
     matches = extract_cpe_matches(catalog)
 
@@ -58,17 +67,25 @@ def test_extract_nested_cpe():
 
 
 def test_invalid_cpe_skipped():
-    catalog = [{
-        "cve_id": "CVE-2026-1002",
-        "configurations": [{
-            "nodes": [{
-                "cpeMatch": [{
-                    "criteria": "invalid-cpe",
-                    "vulnerable": True,
-                }],
-            }],
-        }],
-    }]
+    catalog = [
+        {
+            "cve_id": "CVE-2026-1002",
+            "configurations": [
+                {
+                    "nodes": [
+                        {
+                            "cpeMatch": [
+                                {
+                                    "criteria": "invalid-cpe",
+                                    "vulnerable": True,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
 
     assert extract_cpe_matches(catalog) == []
 
@@ -84,18 +101,26 @@ def test_extract_escaped_colon_cpe():
         "*:*:*:*:*:*:*:*"
     )
 
-    catalog = [{
-        "cve_id": "CVE-2021-44228",
-        "configurations": [{
-            "nodes": [{
-                "operator": "OR",
-                "cpeMatch": [{
-                    "criteria": criteria,
-                    "vulnerable": True,
-                }],
-            }],
-        }],
-    }]
+    catalog = [
+        {
+            "cve_id": "CVE-2021-44228",
+            "configurations": [
+                {
+                    "nodes": [
+                        {
+                            "operator": "OR",
+                            "cpeMatch": [
+                                {
+                                    "criteria": criteria,
+                                    "vulnerable": True,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
 
     matches = extract_cpe_matches(catalog)
 

@@ -4,15 +4,11 @@ from patchledger.simulation.nvd_applicability_v3 import (
     evaluate_nvd_configurations,
 )
 
-
 LINUX = "cpe:2.3:o:example:linux:-:-:-:-:-:-:-:-"
 
 
 def app(version):
-    return (
-        f"cpe:2.3:a:example:app:{version}"
-        ":-:-:-:-:-:-:-"
-    )
+    return f"cpe:2.3:a:example:app:{version}:-:-:-:-:-:-:-"
 
 
 APP_RULE = {
@@ -41,49 +37,71 @@ LINUX_RULE = {
     ],
 )
 def test_branch_aware(operator, inventory, complete, expected):
-    config = [{
-        "nodes": [{
-            "operator": operator,
-            "cpeMatch": [APP_RULE, LINUX_RULE],
-        }],
-    }]
+    config = [
+        {
+            "nodes": [
+                {
+                    "operator": operator,
+                    "cpeMatch": [APP_RULE, LINUX_RULE],
+                }
+            ],
+        }
+    ]
 
-    assert evaluate_nvd_configurations(
-        config,
-        inventory,
-        inventory_complete=complete,
-    ) is expected
+    assert (
+        evaluate_nvd_configurations(
+            config,
+            inventory,
+            inventory_complete=complete,
+        )
+        is expected
+    )
 
 
-@pytest.mark.parametrize("unsupported", [
-    {"operator": "XOR", "cpeMatch": [APP_RULE]},
-    {"operator": "OR", "negate": True, "cpeMatch": [APP_RULE]},
-])
+@pytest.mark.parametrize(
+    "unsupported",
+    [
+        {"operator": "XOR", "cpeMatch": [APP_RULE]},
+        {"operator": "OR", "negate": True, "cpeMatch": [APP_RULE]},
+    ],
+)
 def test_unsupported_branch(unsupported):
-    config = [{
-        "nodes": [
-            {"operator": "OR", "cpeMatch": [LINUX_RULE]},
-            unsupported,
-        ],
-    }]
+    config = [
+        {
+            "nodes": [
+                {"operator": "OR", "cpeMatch": [LINUX_RULE]},
+                unsupported,
+            ],
+        }
+    ]
 
-    assert evaluate_nvd_configurations(
-        config,
-        [LINUX, app("2.0")],
-        inventory_complete=True,
-    ) is None
+    assert (
+        evaluate_nvd_configurations(
+            config,
+            [LINUX, app("2.0")],
+            inventory_complete=True,
+        )
+        is None
+    )
 
 
 def test_platform_only_is_not_vulnerability():
-    config = [{
-        "nodes": [{
-            "operator": "OR",
-            "cpeMatch": [LINUX_RULE],
-        }],
-    }]
+    config = [
+        {
+            "nodes": [
+                {
+                    "operator": "OR",
+                    "cpeMatch": [LINUX_RULE],
+                }
+            ],
+        }
+    ]
 
-    assert evaluate_nvd_configurations(
-        config,
-        [LINUX],
-        inventory_complete=True,
-    ) is None
+    assert (
+        evaluate_nvd_configurations(
+            config,
+            [LINUX],
+            inventory_complete=True,
+        )
+        is None
+    )

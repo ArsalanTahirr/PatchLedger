@@ -8,8 +8,7 @@ NUMERIC_VERSION = re.compile(r"^[0-9]+(?:\.[0-9]+)*$")
 def compare_versions(installed: str, boundary: str):
     """Return -1, 0, 1, or None when comparison is unsupported."""
     if not (
-        NUMERIC_VERSION.fullmatch(installed)
-        and NUMERIC_VERSION.fullmatch(boundary)
+        NUMERIC_VERSION.fullmatch(installed) and NUMERIC_VERSION.fullmatch(boundary)
     ):
         return None
 

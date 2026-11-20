@@ -4,9 +4,9 @@ import csv
 
 csv.field_size_limit(64 * 1024 * 1024)
 import json
+from pathlib import Path
 
 from patchledger.simulation.nvd_cpe import parse_cpe
-from pathlib import Path
 
 
 def load_nvd_catalog(csv_path: str | Path, limit: int = 100):
@@ -15,9 +15,7 @@ def load_nvd_catalog(csv_path: str | Path, limit: int = 100):
 
     catalog = []
 
-    with Path(csv_path).open(
-        newline="", encoding="utf-8"
-    ) as file:
+    with Path(csv_path).open(newline="", encoding="utf-8") as file:
         reader = csv.DictReader(file)
 
         required = {"cve_id", "configurations_json"}
@@ -38,10 +36,12 @@ def load_nvd_catalog(csv_path: str | Path, limit: int = 100):
             if not isinstance(configurations, list) or not configurations:
                 continue
 
-            catalog.append({
-                "cve_id": row["cve_id"],
-                "configurations": configurations,
-            })
+            catalog.append(
+                {
+                    "cve_id": row["cve_id"],
+                    "configurations": configurations,
+                }
+            )
 
             if len(catalog) >= limit:
                 break
@@ -72,21 +72,23 @@ def extract_cpe_matches(catalog):
             if parts is None:
                 continue
 
-            matches.append({
-                "cve_id": cve_id,
-                "part": parts[0],
-                "vendor": parts[1],
-                "product": parts[2],
-                "cpe_version": parts[3],
-                "criteria": criteria,
-                "vulnerable": match.get("vulnerable"),
-                "versionStartIncluding": match.get("versionStartIncluding"),
-                "versionStartExcluding": match.get("versionStartExcluding"),
-                "versionEndIncluding": match.get("versionEndIncluding"),
-                "versionEndExcluding": match.get("versionEndExcluding"),
-                "matchCriteriaId": match.get("matchCriteriaId"),
-                "configuration_path": path,
-            })
+            matches.append(
+                {
+                    "cve_id": cve_id,
+                    "part": parts[0],
+                    "vendor": parts[1],
+                    "product": parts[2],
+                    "cpe_version": parts[3],
+                    "criteria": criteria,
+                    "vulnerable": match.get("vulnerable"),
+                    "versionStartIncluding": match.get("versionStartIncluding"),
+                    "versionStartExcluding": match.get("versionStartExcluding"),
+                    "versionEndIncluding": match.get("versionEndIncluding"),
+                    "versionEndExcluding": match.get("versionEndExcluding"),
+                    "matchCriteriaId": match.get("matchCriteriaId"),
+                    "configuration_path": path,
+                }
+            )
 
         for key in ("nodes", "children", "configurations"):
             if key in node:
