@@ -83,7 +83,7 @@ def match_cpe_criteria(installed_cpe, rule):
         if index == 3:
             continue
 
-        if actual == "*":
+        if actual == "*" and expected != "*":
             unknown = True
         elif expected != "*" and actual != expected:
             return False

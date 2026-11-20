@@ -116,6 +116,88 @@ def evaluate_nvd_configurations(
     )
 
     if condition is True:
-        return True if affected else None
+        if affected:
+            return True
+
+        # A platform-only match is not evidence of vulnerability.
+        # Return False only when all affected rules are definitively
+        # excluded by a complete inventory.
+        if not inventory_complete:
+            return None
+
+        vulnerable_rules = []
+
+        def collect(value):
+            if isinstance(value, list):
+                for item in value:
+                    collect(item)
+                return
+
+            if not isinstance(value, dict):
+                return
+
+            for rule in value.get("cpeMatch", []):
+                if not isinstance(rule, dict):
+                    return
+                if rule.get("vulnerable") is True:
+                    vulnerable_rules.append(rule)
+
+            for key in ("nodes", "children", "configurations"):
+                if key in value:
+                    collect(value[key])
+
+        collect(configurations)
+
+        def has_unsupported(value):
+            if isinstance(value, list):
+                return any(has_unsupported(item) for item in value)
+
+            if not isinstance(value, dict):
+                return True
+
+            operator = value.get("operator", "OR")
+            if operator not in ("AND", "OR"):
+                return True
+
+            if value.get("negate", False) is not False:
+                return True
+
+            if "cpeMatch" in value:
+                rules = value["cpeMatch"]
+                if not isinstance(rules, list):
+                    return True
+
+                for rule in rules:
+                    if not isinstance(rule, dict):
+                        return True
+                    if type(rule.get("vulnerable")) is not bool:
+                        return True
+
+            for key in ("nodes", "children", "configurations"):
+                if key in value:
+                    if not has_supported_children(value[key]):
+                        return True
+
+            return False
+
+        def has_supported_children(children):
+            return (
+                isinstance(children, list)
+                and not has_unsupported(children)
+            )
+
+        if has_unsupported(configurations):
+            return None
+
+        if vulnerable_rules and all(
+            all(
+                match_cpe_criteria(cpe, rule) is False
+                for cpe in installed_cpes
+            )
+            for rule in vulnerable_rules
+        ):
+            return False
+
+        return None
 
     return condition
