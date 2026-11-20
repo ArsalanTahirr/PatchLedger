@@ -8,14 +8,8 @@ import pytest
 
 @pytest.fixture(scope="module")
 def etl():
-    path = (
-        Path(__file__).resolve().parents[2]
-        / "scripts"
-        / "bronze_to_silver.py"
-    )
-    spec = importlib.util.spec_from_file_location(
-        "bronze_to_silver_test", path
-    )
+    path = Path(__file__).resolve().parents[2] / "scripts" / "bronze_to_silver.py"
+    spec = importlib.util.spec_from_file_location("bronze_to_silver_test", path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
@@ -23,31 +17,35 @@ def etl():
 
 
 def test_parent_and_with_platform_prerequisite(etl):
-    config = [{
-        "operator": "AND",
-        "nodes": [
-            {
-                "operator": "OR",
-                "cpeMatch": [{
-                    "vulnerable": True,
-                    "criteria": "cpe:2.3:a:ibm:aspera_faspex:*:*:*:*:*:*:*:*",
-                    "versionStartIncluding": "5.0.0",
-                    "versionEndExcluding": "5.0.19.1",
-                }],
-            },
-            {
-                "operator": "OR",
-                "cpeMatch": [{
-                    "vulnerable": False,
-                    "criteria": "cpe:2.3:o:linux:linux_kernel:-:*:*:*:*:*:*:*",
-                }],
-            },
-        ],
-    }]
+    config = [
+        {
+            "operator": "AND",
+            "nodes": [
+                {
+                    "operator": "OR",
+                    "cpeMatch": [
+                        {
+                            "vulnerable": True,
+                            "criteria": "cpe:2.3:a:ibm:aspera_faspex:*:*:*:*:*:*:*:*",
+                            "versionStartIncluding": "5.0.0",
+                            "versionEndExcluding": "5.0.19.1",
+                        }
+                    ],
+                },
+                {
+                    "operator": "OR",
+                    "cpeMatch": [
+                        {
+                            "vulnerable": False,
+                            "criteria": "cpe:2.3:o:linux:linux_kernel:-:*:*:*:*:*:*:*",
+                        }
+                    ],
+                },
+            ],
+        }
+    ]
 
-    rules = list(etl.cpe_entries(
-        json.dumps(config), "CVE-2026-123218"
-    ))
+    rules = list(etl.cpe_entries(json.dumps(config), "CVE-2026-123218"))
 
     assert len(rules) == 2
     assert all(r["configuration_operator"] == "AND" for r in rules)
@@ -58,25 +56,27 @@ def test_parent_and_with_platform_prerequisite(etl):
 
 
 def test_unspecified_parent_with_and_node(etl):
-    config = [{
-        "nodes": [{
-            "operator": "AND",
-            "cpeMatch": [
+    config = [
+        {
+            "nodes": [
                 {
-                    "vulnerable": True,
-                    "criteria": "cpe:2.3:a:whatsapp:whatsapp:*:*:*:*:desktop:*:*:*",
-                },
-                {
-                    "vulnerable": True,
-                    "criteria": "cpe:2.3:a:whatsapp:whatsapp:*:*:*:*:*:iphone_os:*:*",
-                },
+                    "operator": "AND",
+                    "cpeMatch": [
+                        {
+                            "vulnerable": True,
+                            "criteria": "cpe:2.3:a:whatsapp:whatsapp:*:*:*:*:desktop:*:*:*",
+                        },
+                        {
+                            "vulnerable": True,
+                            "criteria": "cpe:2.3:a:whatsapp:whatsapp:*:*:*:*:*:iphone_os:*:*",
+                        },
+                    ],
+                }
             ],
-        }],
-    }]
+        }
+    ]
 
-    rules = list(etl.cpe_entries(
-        json.dumps(config), "CVE-2019-18426"
-    ))
+    rules = list(etl.cpe_entries(json.dumps(config), "CVE-2019-18426"))
 
     assert len(rules) == 2
     assert all(r["configuration_operator"] == "" for r in rules)

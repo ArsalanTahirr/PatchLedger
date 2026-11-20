@@ -4,12 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-
-SCRIPT = (
-    Path(__file__).resolve().parents[2]
-    / "scripts"
-    / "bronze_to_silver.py"
-)
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "bronze_to_silver.py"
 
 
 def write_csv(path, columns, records):
@@ -32,27 +27,30 @@ def test_nvd_epss_kev_alignment(tmp_path):
         "CVE-2026-100004",
     ]
 
-    config = [{
-        "operator": "AND",
-        "nodes": [{
-            "operator": "OR",
-            "cpeMatch": [{
-                "vulnerable": True,
-                "criteria": (
-                    "cpe:2.3:a:example:application:"
-                    "*:*:*:*:*:*:*:*"
-                ),
-            }],
-        }],
-    }]
+    config = [
+        {
+            "operator": "AND",
+            "nodes": [
+                {
+                    "operator": "OR",
+                    "cpeMatch": [
+                        {
+                            "vulnerable": True,
+                            "criteria": (
+                                "cpe:2.3:a:example:application:*:*:*:*:*:*:*:*"
+                            ),
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
 
     nvd = [
         {
             "cve_id": cve,
-            "published": f"2026-11-{10-i:02d}T12:00:00Z",
-            "configurations_json": (
-                json.dumps(config) if i == 3 else ""
-            ),
+            "published": f"2026-11-{10 - i:02d}T12:00:00Z",
+            "configurations_json": (json.dumps(config) if i == 3 else ""),
         }
         for i, cve in enumerate(ids)
     ]
@@ -76,11 +74,13 @@ def test_nvd_epss_kev_alignment(tmp_path):
     write_csv(
         tmp_path / "known_exploited_vulnerabilities.csv",
         ["cveID", "vendorProject", "product"],
-        [{
-            "cveID": ids[3],
-            "vendorProject": "Example",
-            "product": "Application",
-        }],
+        [
+            {
+                "cveID": ids[3],
+                "vendorProject": "Example",
+                "product": "Application",
+            }
+        ],
     )
 
     output = tmp_path / "alignment_output"
@@ -89,33 +89,27 @@ def test_nvd_epss_kev_alignment(tmp_path):
         [
             sys.executable,
             str(SCRIPT),
-            "--data-dir", str(tmp_path),
-            "--output-dir", str(output),
-            "--max-rows", "3",
-            "--chunksize", "2",
+            "--data-dir",
+            str(tmp_path),
+            "--output-dir",
+            str(output),
+            "--max-rows",
+            "3",
+            "--chunksize",
+            "2",
         ],
+        check=False,
         capture_output=True,
         text=True,
     )
 
-    assert result.returncode == 0, (
-        result.stdout + "\n" + result.stderr
-    )
+    assert result.returncode == 0, result.stdout + "\n" + result.stderr
 
     silver = output / "silver"
 
-    nvd_ids = {
-        r["cve_id"]
-        for r in read_csv(silver / "nvd_clean.csv")
-    }
-    epss_ids = {
-        r["cve_id"]
-        for r in read_csv(silver / "epss_clean.csv")
-    }
-    kev_ids = {
-        r["cve_id"]
-        for r in read_csv(silver / "kev_clean.csv")
-    }
+    nvd_ids = {r["cve_id"] for r in read_csv(silver / "nvd_clean.csv")}
+    epss_ids = {r["cve_id"] for r in read_csv(silver / "epss_clean.csv")}
+    kev_ids = {r["cve_id"] for r in read_csv(silver / "kev_clean.csv")}
 
     assert nvd_ids == {ids[0], ids[1], ids[3]}
     assert epss_ids == {ids[0], ids[3]}
@@ -129,9 +123,7 @@ def test_nvd_epss_kev_alignment(tmp_path):
     assert cpe[0]["node_operator"] == "OR"
 
     quality = json.loads(
-        (
-            output / "reports" / "data_quality_details.json"
-        ).read_text(encoding="utf-8")
+        (output / "reports" / "data_quality_details.json").read_text(encoding="utf-8")
     )
 
     selection = quality["selection"]
