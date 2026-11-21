@@ -2,6 +2,7 @@
 
 import csv
 import importlib.util
+import os
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -36,6 +37,24 @@ def bronze_importer(postgres_engine, monkeypatch):
     original_run = subprocess.run
     original_popen = subprocess.Popen
 
+    url = postgres_engine.url
+
+    if (
+        url.drivername != "postgresql+psycopg"
+        or url.host not in ("localhost", "127.0.0.1")
+        or (url.port or 5432) != 5432
+        or not url.username
+    ):
+        pytest.fail("STOP: Unexpected test PostgreSQL connection")
+
+    connection_env = {
+        "PGHOST": url.host,
+        "PGPORT": str(url.port or 5432),
+        "PGUSER": url.username,
+        "PGPASSWORD": url.password or "",
+        "PGDATABASE": database,
+    }
+
     def redirect(command):
         command = list(command)
 
@@ -47,13 +66,34 @@ def bronze_importer(postgres_engine, monkeypatch):
         if command[position + 1] != "patchledger":
             raise RuntimeError("STOP: Unexpected original database")
 
-        command[position + 1] = database
-        return command
+        return [
+            "psql",
+            "-h",
+            url.host,
+            "-p",
+            str(url.port or 5432),
+            "-U",
+            url.username,
+            *command[5:position],
+            "-d",
+            database,
+            *command[position + 2 :],
+        ]
 
     def safe_run(command, *args, **kwargs):
+        kwargs["env"] = {
+            **os.environ,
+            **kwargs.get("env", {}),
+            **connection_env,
+        }
         return original_run(redirect(command), *args, **kwargs)
 
     def safe_popen(command, *args, **kwargs):
+        kwargs["env"] = {
+            **os.environ,
+            **kwargs.get("env", {}),
+            **connection_env,
+        }
         return original_popen(redirect(command), *args, **kwargs)
 
     monkeypatch.setattr(
